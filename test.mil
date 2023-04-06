@@ -1,0 +1,9 @@
+fn main() -> (i32) {
+    fn putchar(char: i32) -> (i32);
+
+    putchar(72)
+    putchar(105)
+    putchar(10)
+
+    return 0
+}
