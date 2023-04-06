@@ -230,6 +230,8 @@ impl<'a> Translator<'a> {
             .get_value_from_scope(variable)
             .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
 
+        let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
+
         self.builder.def_var(
             variable
                 .get_cl_int_var()
