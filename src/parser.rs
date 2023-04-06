@@ -1,9 +1,10 @@
 /// The AST node for expressions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(String),
     Identifier(String),
-    Assign((String, String), Box<Expr>),
+    DefineVar((String, String), Box<Expr>),
+    Assign(String, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -49,6 +50,7 @@ peg::parser!(pub grammar parser() for str {
 
     rule statement() -> Expr
         = _ e:def_func() { e }
+        / _ e:def_var() { e }
         / _ e:return_expr() { e }
         / _ e:expression() { e }
 
@@ -73,7 +75,10 @@ peg::parser!(pub grammar parser() for str {
         { Expr::WhileLoop(Box::new(e), loop_body) }
 
     rule assignment() -> Expr
-        = i:identifier() ":" _ t:identifier() _ "=" _ e:expression() {Expr::Assign((i, t), Box::new(e))}
+        = i:identifier() _ "=" _ e:expression() { Expr::Assign(i, Box::new(e)) }
+
+    rule def_var() -> Expr
+        = i:identifier() ":" _ t:identifier() _ "=" _ e:expression() { Expr::DefineVar((i, t), Box::new(e)) }
 
     rule binary_op() -> Expr = precedence!{
         a:@ _ "==" _ b:(@) { Expr::Eq(Box::new(a), Box::new(b)) }

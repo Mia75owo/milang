@@ -9,7 +9,7 @@ use crate::ltype::LType;
 
 #[derive(Clone)]
 pub struct LInt {
-    pub raw: i64,
+    //pub raw: i64,
     pub cl_repr: Variable,
 }
 #[derive(Clone)]

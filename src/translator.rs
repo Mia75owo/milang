@@ -64,15 +64,20 @@ impl<'a> Translator<'a> {
             Expr::Ge(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThanOrEqual, *lhs, *rhs),
             Expr::Call(name, args) => self.translate_call(&name, args),
             Expr::GlobalDataAddr(name) => self.translate_global_data_addr(name),
-            Expr::Identifier(_name) => {
-                //let variable = self
-                //.variables
-                //.get(&name)
-                //.expect("Variable '{name}' not defined");
-                //self.builder.use_var(*variable)
-                todo!()
+            Expr::Identifier(name) => {
+                let var = self
+                    .scope
+                    .get_value_from_scope(&name)
+                    .unwrap_or_else(|| panic!("Variable '{name}' not defined!"));
+
+                let val = var
+                    .get_cl_int_var()
+                    .expect("Failed to get value from variable '{name}'");
+
+                self.builder.use_var(val)
             }
-            Expr::Assign(name, expr) => self.translate_assign(name, *expr),
+            Expr::Assign(name, expr) => self.translate_assign(&name, *expr),
+            Expr::DefineVar(name_and_type, expr) => self.translate_variable_declaration(&name_and_type, *expr),
             Expr::IfElse(condition, then_body, else_body) => {
                 self.translate_if_else(*condition, then_body, else_body)
             }
@@ -203,20 +208,35 @@ impl<'a> Translator<'a> {
         self.builder.ins().iconst(int_type, 0)
     }
 
-    fn translate_assign(&mut self, variable: (String, String), expr: Expr) -> Value {
-        let new_value = self.translate_expr(expr);
-        let variable = self
-            .scope
-            .get_value_from_scope(&variable.0)
-            .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable.0));
+    fn translate_variable_declaration(&mut self, variable: &(String, String), expr: Expr) -> Value {
+        let value = self.translate_expr(expr);
+        let variable = self.declare_variable(variable);
+
+        let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
 
         self.builder.def_var(
             variable
                 .get_cl_int_var()
                 .expect("Variable is not of type int!"),
-            new_value,
+            value,
         );
-        new_value
+        value
+    }
+
+    fn translate_assign(&mut self, variable: &str, expr: Expr) -> Value {
+        let value = self.translate_expr(expr);
+        let variable = self
+            .scope
+            .get_value_from_scope(variable)
+            .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
+
+        self.builder.def_var(
+            variable
+                .get_cl_int_var()
+                .expect("Variable is not of type int!"),
+            value,
+        );
+        value
     }
 
     fn translate_icmp(&mut self, cmp: IntCC, lhs: Expr, rhs: Expr) -> Value {
@@ -271,18 +291,21 @@ impl<'a> Translator<'a> {
         entry_block: Block,
     ) {
         for (i, variable) in params.iter().enumerate() {
-            let (var, var_type) = self.declare_variable(variable);
+            let variable = self.declare_variable(variable);
 
             let val = self.builder.block_params(entry_block)[i];
-            self.builder.declare_var(var, var_type.to_type());
-            self.builder.def_var(var, val);
+            self.builder
+                .declare_var(variable.get_cl_int_var().unwrap(), variable.ltype.to_type());
+            self.builder
+                .def_var(variable.get_cl_int_var().unwrap(), val);
 
             self.variable_index += 1;
         }
 
-        let (var, var_type) = self.declare_variable(&return_val);
-        let zero = self.builder.ins().iconst(var_type.to_type(), 0);
-        self.builder.def_var(var, zero);
+        let variable = self.declare_variable(&return_val);
+        let zero = self.builder.ins().iconst(variable.ltype.to_type(), 0);
+        self.builder
+            .def_var(variable.get_cl_int_var().unwrap(), zero);
         self.variable_index += 1;
 
         for expr in stmts {
@@ -290,15 +313,17 @@ impl<'a> Translator<'a> {
         }
     }
 
-    fn declare_variable(&mut self, variable: &(String, String)) -> (Variable, LType) {
+    fn declare_variable(&mut self, variable: &(String, String)) -> LVariable {
         let (str_var_name, str_var_type) = variable;
 
         let var = Variable::new(self.variable_index);
+        self.variable_index += 1;
+
         let var_type = LType::parse_basic(str_var_type)
             .unwrap_or_else(|| panic!("Failed to parse type: '{}'", &str_var_type));
 
         let value = LValue::Int(LInt {
-            raw: 0,
+            //raw: 0,
             cl_repr: var,
         });
         let variable = LVariable {
@@ -306,16 +331,16 @@ impl<'a> Translator<'a> {
             lvalue: value,
         };
 
-        self.scope.insert_variable(str_var_name, variable);
+        self.scope.insert_variable(str_var_name, variable.clone());
         self.builder.declare_var(var, var_type.to_type());
 
-        (var, var_type)
+        variable
     }
 
     fn declare_variables_in_stmt(&mut self, expr: &Expr) {
         match expr {
-            Expr::Assign(variable, _expr) => {
-                self.declare_variable(variable);
+            Expr::Assign(variable, expr) => {
+                self.translate_assign(variable, *expr.clone());
             }
             Expr::IfElse(ref _condition, ref _then_body, ref _else_body) => {
                 //for stmt in then_body {

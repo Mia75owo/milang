@@ -1,9 +1,13 @@
 fn main() -> (i32) {
     fn putchar(char: i32) -> (i32);
 
-    putchar(72)
-    putchar(105)
-    putchar(10)
+    H: i8 = 72
+    i: i8 = 105
+    nl: i8 = 10
+
+    putchar(H)
+    putchar(i)
+    putchar(nl)
 
     return 0
 }
