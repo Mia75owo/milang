@@ -2,14 +2,14 @@ use cranelift::prelude::*;
 
 use crate::parser::Expr;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LFunctionType {
     pub name: String,
     pub params: Vec<(String, LType)>,
     pub return_type: Box<LType>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LType {
     I8,
     I16,

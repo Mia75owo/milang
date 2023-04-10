@@ -1,4 +1,59 @@
 use crate::compiler::Compiler;
+use crate::prelude::*;
+use crate::scope::*;
+
+// ======
+// SCOPES
+// ======
+
+#[test]
+fn test_scope_create() {
+    let mut root = ScopeRoot::default();
+    let path = root.create_scope_at(ROOT_PATH, "foo");
+    assert_eq!(path, "#@#foo");
+}
+
+#[test]
+fn test_scope_create2() {
+    let mut root = ScopeRoot::default();
+    let foo_path = root.create_scope_at(ROOT_PATH, "foo");
+    let baa_path = root.create_scope_at(&foo_path, "baa");
+    assert_eq!(baa_path, "#@#foo#baa");
+}
+
+#[test]
+fn test_scope_find() {
+    let root_var = LVariable {
+        ltype: LType::I8,
+        lvalue: LValue::Dummy,
+    };
+    let foo_var = LVariable {
+        ltype: LType::I16,
+        lvalue: LValue::Dummy,
+    };
+    let baa_var = LVariable {
+        ltype: LType::I32,
+        lvalue: LValue::Dummy,
+    };
+
+    let mut root = ScopeRoot::default();
+    let root_var_path = root.insert_variable_at(ROOT_PATH, "root_var", root_var.clone());
+    let foo_path = root.create_scope_at(ROOT_PATH, "foo");
+    let foo_var_path = root.insert_variable_at(&foo_path, "foo_var", foo_var.clone());
+    let baa_path = root.create_scope_at(&foo_path, "baa");
+    let baa_var_path = root.insert_variable_at(&baa_path, "baa_var", baa_var.clone());
+
+    let got = root.get_variable(&root_var_path).unwrap();
+    assert_eq!(root_var, got);
+    let got = root.get_variable(&foo_var_path).unwrap();
+    assert_eq!(foo_var, got);
+    let got = root.get_variable(&baa_var_path).unwrap();
+    assert_eq!(baa_var, got);
+}
+
+// ===========
+// COMPILATION
+// ===========
 
 fn compile(input: &str) -> Result<cranelift_object::ObjectProduct, String> {
     let translator = Compiler::default();

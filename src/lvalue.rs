@@ -7,14 +7,14 @@ use cranelift::{
 use cranelift_module::{Linkage, Module};
 use cranelift_object::ObjectModule;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LInt {
     //pub raw: i64,
     pub cl_repr: Variable,
 }
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LStructure {}
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LFunctionValue {
     pub name: String,
     pub signature: Signature,
@@ -55,14 +55,15 @@ impl LFunctionValue {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LValue {
     Int(LInt),
     Structure(LStructure),
     Function(LFunctionValue),
+    Dummy,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LVariable {
     pub ltype: LType,
     pub lvalue: LValue,

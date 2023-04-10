@@ -7,8 +7,9 @@ use cranelift_object::ObjectModule;
 pub struct Translator<'a> {
     pub builder: FunctionBuilder<'a>,
     pub module: &'a mut ObjectModule,
-    pub scope: &'a mut Scope,
+    pub scope: &'a mut ScopeRoot,
     pub variable_index: usize,
+    pub current_scope: String,
 }
 
 impl<'a> Translator<'a> {
@@ -61,7 +62,7 @@ impl<'a> Translator<'a> {
             Expr::Identifier(name) => {
                 let var = self
                     .scope
-                    .get_value_from_scope(&name)
+                    .find_variable_at(&self.current_scope, &name)
                     .unwrap_or_else(|| panic!("Variable '{name}' not defined!"));
 
                 let val = var
@@ -101,7 +102,8 @@ impl<'a> Translator<'a> {
                     lvalue: func_value,
                 };
 
-                self.scope.insert_variable(&name, variable);
+                self.scope
+                    .insert_variable_at(&self.current_scope, &name, variable);
 
                 self.builder.ins().iconst(types::I64, 0)
             }
@@ -223,7 +225,7 @@ impl<'a> Translator<'a> {
         let value = self.translate_expr(expr);
         let variable = self
             .scope
-            .get_value_from_scope(variable)
+            .find_variable_at(&self.current_scope, variable)
             .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
 
         let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
@@ -246,7 +248,7 @@ impl<'a> Translator<'a> {
     fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Value {
         let func = self
             .scope
-            .get_value_from_scope(name)
+            .find_variable_at(&self.current_scope, name)
             .unwrap_or_else(|| panic!("Did not find function '{name}' in scope!"));
 
         let func = match func.lvalue {
@@ -329,7 +331,8 @@ impl<'a> Translator<'a> {
             lvalue: value,
         };
 
-        self.scope.insert_variable(str_var_name, variable.clone());
+        self.scope
+            .insert_variable_at(&self.current_scope, str_var_name, variable.clone());
         self.builder.declare_var(var, var_type.to_type());
 
         variable

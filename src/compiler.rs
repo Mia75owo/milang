@@ -13,7 +13,7 @@ pub struct Compiler {
     ctx: codegen::Context,
     //data_ctx: DataContext,
     module: ObjectModule,
-    scope: Scope,
+    scope: ScopeRoot,
 }
 
 impl Default for Compiler {
@@ -37,7 +37,7 @@ impl Default for Compiler {
         let builder_context = FunctionBuilderContext::new();
         let ctx = module.make_context();
         //let data_ctx = DataContext::new();
-        let scope = Scope::create_root();
+        let scope = ScopeRoot::default();
 
         Self {
             builder_context,
@@ -96,11 +96,14 @@ impl Compiler {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
+        let function_scope = self.scope.create_scope_for_variable_at(ROOT_PATH, &name);
+
         let mut trans = Translator {
             builder,
             module: &mut self.module,
             scope: &mut self.scope,
             variable_index: 0,
+            current_scope: function_scope,
         };
 
         for expr in stmts {
@@ -144,7 +147,7 @@ impl Compiler {
             lvalue: func_value,
         };
 
-        self.scope.insert_variable(&name, variable);
+        self.scope.insert_variable_at(ROOT_PATH, &name, variable);
 
         Ok(())
     }
