@@ -19,6 +19,25 @@ impl<'a> Translator<'a> {
                 let imm: i64 = literal.parse().unwrap();
                 self.builder.ins().iconst(types::I64, imm)
             }
+            Expr::Char(c) => {
+                let c = if c.len() == 1 {
+                    c.chars().next().unwrap()
+                } else if c.len() == 2 {
+                    match &c.chars().collect::<Vec<char>>()[..] {
+                        ['\\', 'n'] => '\n',
+                        ['\\', 't'] => '\t',
+                        ['\\', 'r'] => '\r',
+                        ['\\', '0'] => '\0',
+                        ['\\', '\\'] => '\\',
+                        _ => panic!("Failed to parse char: '{c}'")
+                    }
+                } else {
+                    panic!("Failed to parse char: '{c}'");
+                };
+
+                let imm = c as u8;
+                self.builder.ins().iconst(types::I8, imm as i64)
+            }
             Expr::Add(lhs, rhs) => {
                 let lhs = self.translate_expr(*lhs);
                 let rhs = self.translate_expr(*rhs);

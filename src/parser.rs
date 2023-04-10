@@ -2,6 +2,7 @@
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(String),
+    Char(String),
     Identifier(String),
     DefineVar((String, String), Box<Expr>),
     Assign(String, Box<Expr>),
@@ -107,6 +108,7 @@ peg::parser!(pub grammar parser() for str {
         a:@ _ "*" _ b:(@) { Expr::Mul(Box::new(a), Box::new(b)) }
         a:@ _ "/" _ b:(@) { Expr::Div(Box::new(a), Box::new(b)) }
         --
+        c:char() { c }
         i:identifier() _ "(" args:((_ e:expression() _ {e}) ** ",") ")" { Expr::Call(i, args) }
         i:identifier() { Expr::Identifier(i) }
         l:literal() { l }
@@ -119,6 +121,9 @@ peg::parser!(pub grammar parser() for str {
     rule literal() -> Expr
         = n:$(['0'..='9']+) { Expr::Literal(n.to_owned()) }
         / "&" i:identifier() { Expr::GlobalDataAddr(i) }
+
+    rule char() -> Expr
+        = "'" c:$("\\"? [_]) "'" { Expr::Char(c.to_owned()) }
 
     rule _() =  quiet!{[' ' | '\t' | '\n']*}
 });

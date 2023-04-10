@@ -1,17 +1,13 @@
 fn main() -> (i32) {
     fn putchar(char: i32) -> (i32);
 
-    H: i8 = 0
-    while H < 72 {
-        H = H + 1
-    }
-
-    i: i8 = 105
-    nl: i8 = 10
-
-    putchar(H)
-    putchar(i)
-    putchar(nl)
+    putchar('H')
+    putchar('i')
+    putchar('i')
+    putchar('i')
+    putchar('\n')
 
     return 0
 }
+
+
