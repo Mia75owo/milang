@@ -251,7 +251,7 @@ impl<'a> Translator<'a> {
         let func = self
             .scope
             .get_value_from_scope(name)
-            .expect("Did not find function '{name}' in scope!");
+            .unwrap_or_else(|| panic!("Did not find function '{name}' in scope!"));
 
         let func = match func.lvalue {
             LValue::Function(f) => f,

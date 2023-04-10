@@ -1,5 +1,11 @@
+
+fn foo() -> (i32) {
+    return 0
+}
 fn main() -> (i32) {
     fn putchar(char: i32) -> (i32);
+
+    foo()
 
     H: i8 = 0
     i: i8 = 105

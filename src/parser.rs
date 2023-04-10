@@ -27,16 +27,27 @@ pub enum Expr {
     Return(Box<Expr>),
 }
 
+#[derive(Debug, Clone)]
+pub struct FunctionExpr {
+    pub name: String,
+    pub params: Vec<(String, String)>,
+    pub return_type: String,
+    pub stmts: Vec<Expr>,
+}
+
 peg::parser!(pub grammar parser() for str {
-    pub rule function() -> (String, Vec<(String, String)>, String, Vec<Expr>)
+    pub rule file() -> Vec<FunctionExpr>
+        = _ func:( function()*) { func }
+
+    pub rule function() -> FunctionExpr
         = "fn" _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:identifier() _ {(n, t)}) ** ",") ")" _
         "->" _
-        "(" returns:identifier() ")" _
+        "(" return_type:identifier() ")" _
         "{" _
         stmts:statements()
         _ "}" _
-        { (name, params, returns, stmts) }
+        { FunctionExpr { name, params, return_type, stmts } }
 
     rule def_func() -> Expr
         = "fn" _ name:identifier() _

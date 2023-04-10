@@ -1,4 +1,4 @@
-use crate::{scope::Scope, translator::Translator};
+use crate::{parser::FunctionExpr, scope::Scope, translator::Translator, lvalue::{LValue, LFunctionValue, LVariable}};
 
 use cranelift::{
     codegen::verify_function,
@@ -52,13 +52,21 @@ impl Default for Compiler {
 
 impl Compiler {
     pub fn compile(mut self, input: &str) -> Result<ObjectProduct, String> {
-        let (name, params, return_type, stmts) =
-            parser::parser::function(input).map_err(|e| e.to_string())?;
-        self.translate_function(&name, params, return_type, stmts)?;
+        let file = parser::parser::file(input).map_err(|e| e.to_string())?;
 
-        println!("{}", self.ctx.func.display());
+        for func in file {
+            let FunctionExpr {
+                name,
+                params,
+                return_type,
+                stmts,
+            } = func;
+            self.translate_function(&name, params, return_type, stmts)?;
 
-        self.module.clear_context(&mut self.ctx);
+            println!("{}", self.ctx.func.display());
+
+            self.module.clear_context(&mut self.ctx);
+        }
 
         let object = self.module.finish();
         Ok(object)
@@ -109,17 +117,6 @@ impl Compiler {
             trans.translate_expr(expr);
         }
 
-        /*
-        let return_variable = trans
-            .scope
-            .get_value_from_scope(&return_type.0)
-            .unwrap()
-            .get_cl_int_var()
-            .unwrap();
-        let return_value = trans.builder.use_var(return_variable);
-
-        trans.builder.ins().return_(&[return_value]);
-        */
         trans.builder.finalize();
 
         let id = self
@@ -138,6 +135,27 @@ impl Compiler {
         self.module
             .define_function(id, &mut self.ctx)
             .map_err(|e| e.to_string())?;
+
+
+        // Scope
+
+        let func = Expr::DefFunc {
+            name: name.to_owned(),
+            params,
+            return_type,
+        };
+
+        let func_type = LType::parse_function(func).unwrap();
+        let func_value = LValue::Function(
+            LFunctionValue::gen_from_function_type(func_type.clone(), &mut self.module).unwrap(),
+        );
+
+        let variable = LVariable {
+            ltype: func_type,
+            lvalue: func_value,
+        };
+
+        self.scope.insert_variable(name, variable);
 
         Ok(())
     }
