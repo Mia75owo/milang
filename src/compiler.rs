@@ -1,4 +1,5 @@
-use crate::{parser::FunctionExpr, scope::Scope, translator::Translator, lvalue::{LValue, LFunctionValue, LVariable}};
+use crate::prelude::*;
+use crate::translator::Translator;
 
 use cranelift::{
     codegen::verify_function,
@@ -6,8 +7,6 @@ use cranelift::{
 };
 use cranelift_module::{/*DataContext, */ Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
-
-use crate::parser::{self, Expr};
 
 pub struct Compiler {
     builder_context: FunctionBuilderContext,
@@ -52,19 +51,11 @@ impl Default for Compiler {
 
 impl Compiler {
     pub fn compile(mut self, input: &str) -> Result<ObjectProduct, String> {
-        let file = parser::parser::file(input).map_err(|e| e.to_string())?;
+        let file = parser::file(input).map_err(|e| e.to_string())?;
 
         for func in file {
-            let FunctionExpr {
-                name,
-                params,
-                return_type,
-                stmts,
-            } = func;
-            self.translate_function(&name, params, return_type, stmts)?;
-
+            self.translate_function(func)?;
             println!("{}", self.ctx.func.display());
-
             self.module.clear_context(&mut self.ctx);
         }
 
@@ -72,14 +63,13 @@ impl Compiler {
         Ok(object)
     }
 
-    pub fn translate_function(
-        &mut self,
-        name: &str,
-        params: Vec<(String, String)>,
-        return_type: String,
-        stmts: Vec<Expr>,
-    ) -> Result<(), String> {
-        use crate::ltype::LType;
+    pub fn translate_function(&mut self, func: FunctionExpr) -> Result<(), String> {
+        let FunctionExpr {
+            name,
+            params,
+            return_type,
+            stmts,
+        } = func;
 
         for (_name, type_name) in &params {
             let ptype =
@@ -121,7 +111,7 @@ impl Compiler {
 
         let id = self
             .module
-            .declare_function(name, Linkage::Export, &self.ctx.func.signature)
+            .declare_function(&name, Linkage::Export, &self.ctx.func.signature)
             .map_err(|e| e.to_string())?;
 
         let flags = settings::Flags::new(settings::builder());
@@ -135,7 +125,6 @@ impl Compiler {
         self.module
             .define_function(id, &mut self.ctx)
             .map_err(|e| e.to_string())?;
-
 
         // Scope
 
@@ -155,7 +144,7 @@ impl Compiler {
             lvalue: func_value,
         };
 
-        self.scope.insert_variable(name, variable);
+        self.scope.insert_variable(&name, variable);
 
         Ok(())
     }

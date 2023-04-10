@@ -8,6 +8,14 @@ pub mod parser;
 pub mod scope;
 pub mod translator;
 
+pub mod prelude {
+    pub use crate::cl_type::*;
+    pub use crate::ltype::*;
+    pub use crate::lvalue::*;
+    pub use crate::parser::*;
+    pub use crate::scope::*;
+}
+
 fn main() {
     let code = std::fs::read_to_string("test.mil").expect("Failed to read file");
 

@@ -1,14 +1,8 @@
+use crate::prelude::*;
+
 use cranelift::prelude::*;
 use cranelift_module::{/*DataContext, */ Linkage, Module};
 use cranelift_object::ObjectModule;
-
-use crate::{
-    cl_type::{cast_types, cast_value},
-    ltype::LType,
-    lvalue::{LFunctionValue, LInt, LValue, LVariable},
-    parser::Expr,
-    scope::Scope,
-};
 
 pub struct Translator<'a> {
     pub builder: FunctionBuilder<'a>,
@@ -77,7 +71,9 @@ impl<'a> Translator<'a> {
                 self.builder.use_var(val)
             }
             Expr::Assign(name, expr) => self.translate_assign(&name, *expr),
-            Expr::DefineVar(name_and_type, expr) => self.translate_variable_declaration(&name_and_type, *expr),
+            Expr::DefineVar(name_and_type, expr) => {
+                self.translate_variable_declaration(&name_and_type, *expr)
+            }
             Expr::IfElse(condition, then_body, else_body) => {
                 self.translate_if_else(*condition, then_body, else_body)
             }

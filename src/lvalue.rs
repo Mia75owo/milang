@@ -1,11 +1,11 @@
+use crate::prelude::*;
+
 use cranelift::{
     codegen::ir::FuncRef,
     prelude::{AbiParam, FunctionBuilder, Signature, Variable},
 };
 use cranelift_module::{Linkage, Module};
 use cranelift_object::ObjectModule;
-
-use crate::ltype::LType;
 
 #[derive(Clone)]
 pub struct LInt {
