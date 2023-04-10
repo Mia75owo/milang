@@ -92,6 +92,8 @@ peg::parser!(pub grammar parser() for str {
         = i:identifier() ":" _ t:identifier() _ "=" _ e:expression() { Expr::DefineVar((i, t), Box::new(e)) }
 
     rule binary_op() -> Expr = precedence!{
+        "(" _ a:binary_op() _ ")" { a }
+        --
         a:@ _ "==" _ b:(@) { Expr::Eq(Box::new(a), Box::new(b)) }
         a:@ _ "!=" _ b:(@) { Expr::Ne(Box::new(a), Box::new(b)) }
         a:@ _ "<"  _ b:(@) { Expr::Lt(Box::new(a), Box::new(b)) }

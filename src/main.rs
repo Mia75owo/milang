@@ -6,6 +6,8 @@ pub mod ltype;
 pub mod lvalue;
 pub mod parser;
 pub mod scope;
+#[cfg(test)]
+mod tests;
 pub mod translator;
 
 pub mod prelude {

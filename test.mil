@@ -1,5 +1,5 @@
 fn foo() -> (i32) {
-    return 105
+    return (49 + 1) * 2 + 5
 }
 
 fn main() -> (i32) {
