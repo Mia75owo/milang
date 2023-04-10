@@ -8,7 +8,7 @@ pub struct Translator<'a> {
     pub builder: FunctionBuilder<'a>,
     pub module: &'a mut ObjectModule,
     pub scope: &'a mut ScopeRoot,
-    pub variable_index: usize,
+    pub variable_index: &'a mut usize,
     pub current_scope: String,
 }
 
@@ -242,6 +242,9 @@ impl<'a> Translator<'a> {
     fn translate_icmp(&mut self, cmp: IntCC, lhs: Expr, rhs: Expr) -> Value {
         let lhs = self.translate_expr(lhs);
         let rhs = self.translate_expr(rhs);
+
+        let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
+
         self.builder.ins().icmp(cmp, lhs, rhs)
     }
 
@@ -299,14 +302,14 @@ impl<'a> Translator<'a> {
             self.builder
                 .def_var(variable.get_cl_int_var().unwrap(), val);
 
-            self.variable_index += 1;
+            *self.variable_index += 1;
         }
 
         let variable = self.declare_variable(&return_val);
         let zero = self.builder.ins().iconst(variable.ltype.to_type(), 0);
         self.builder
             .def_var(variable.get_cl_int_var().unwrap(), zero);
-        self.variable_index += 1;
+        *self.variable_index += 1;
 
         for expr in stmts {
             self.declare_variables_in_stmt(expr);
@@ -316,8 +319,8 @@ impl<'a> Translator<'a> {
     fn declare_variable(&mut self, variable: &(String, String)) -> LVariable {
         let (str_var_name, str_var_type) = variable;
 
-        let var = Variable::new(self.variable_index);
-        self.variable_index += 1;
+        let var = Variable::new(*self.variable_index);
+        *self.variable_index += 1;
 
         let var_type = LType::parse_basic(str_var_type)
             .unwrap_or_else(|| panic!("Failed to parse type: '{}'", &str_var_type));

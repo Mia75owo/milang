@@ -14,6 +14,7 @@ pub struct Compiler {
     //data_ctx: DataContext,
     module: ObjectModule,
     scope: ScopeRoot,
+    variable_index: usize,
 }
 
 impl Default for Compiler {
@@ -45,6 +46,7 @@ impl Default for Compiler {
             //data_ctx,
             module,
             scope,
+            variable_index: 0,
         }
     }
 }
@@ -102,7 +104,7 @@ impl Compiler {
             builder,
             module: &mut self.module,
             scope: &mut self.scope,
-            variable_index: 0,
+            variable_index: &mut self.variable_index,
             current_scope: function_scope,
         };
 

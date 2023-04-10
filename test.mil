@@ -1,17 +1,13 @@
-fn foo() -> (i32) {
-    return (49 + 1) * 2 + 5
-}
-
 fn main() -> (i32) {
     fn putchar(char: i32) -> (i32);
 
-    foo()
-
     H: i8 = 0
-    i: i8 = foo()
-    nl: i8 = 10
+    while H < 72 {
+        H = H + 1
+    }
 
-    H = 72
+    i: i8 = 105
+    nl: i8 = 10
 
     putchar(H)
     putchar(i)
