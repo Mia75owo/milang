@@ -1,9 +1,7 @@
-//use compiler::Compiler;
-use comp::Compiler;
+use compiler::Compiler;
 
 pub mod cl_type;
-pub mod comp;
-//pub mod compiler;
+pub mod compiler;
 pub mod ltype;
 pub mod lvalue;
 pub mod parser;

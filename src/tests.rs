@@ -1,5 +1,4 @@
-//use crate::compiler::Compiler;
-use crate::comp::Compiler;
+use crate::compiler::Compiler;
 use crate::prelude::*;
 use crate::scope::*;
 
