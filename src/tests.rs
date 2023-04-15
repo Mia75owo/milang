@@ -181,3 +181,31 @@ return 0
 fn compile_typecheck_false() {
     // TODO: falsy typechecks
 }
+
+#[test]
+fn compile_call_function() {
+    let code = r#"
+fn foo() -> (i32) {
+    return 0
+}
+
+foo()
+
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_get_value_from_function_call() {
+    let code = r#"
+fn foo() -> (i32) {
+    return 105
+}
+
+x: i32 = foo()
+
+return 0
+    "#;
+    compile(code).unwrap();
+}

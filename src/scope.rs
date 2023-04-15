@@ -13,12 +13,38 @@ pub struct Scope {
     map: HashMap<String, ScopeNode>,
     path: String,
 }
+impl std::fmt::Display for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "{}\n=====\n{}",
+            self.path,
+            self.map
+                .iter()
+                .map(|f| f.0)
+                .fold("".to_owned(), |a, b| format!("{a}{b}\n"))
+        )
+    }
+}
 
 pub struct ScopeRoot {
     root: Scope,
 }
+impl std::fmt::Display for ScopeRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self.root)
+    }
+}
 
 impl ScopeRoot {
+    pub fn display_scope_at(&mut self, path: &str) {
+        let scope = self.get_scope(path);
+        if let Some(s) = scope {
+            println!("{}", s);
+        } else {
+            println!("{{x}}");
+        }
+    }
     pub fn insert_variable_at(&mut self, path: &str, name: &str, variable: LVariable) -> String {
         let scope = self.get_scope(path).unwrap();
         scope.insert_variable(name, variable);
@@ -33,7 +59,7 @@ impl ScopeRoot {
     }
     pub fn get_variable(&mut self, path: &str) -> Option<LVariable> {
         if path == ROOT_PATH {
-            return None
+            return None;
         }
         // Remove root (#@)
         let path = path.strip_prefix(ROOT_PATH).unwrap_or(path);
@@ -49,7 +75,7 @@ impl ScopeRoot {
     }
     fn get_scope(&mut self, path: &str) -> Option<&mut Scope> {
         if path == ROOT_PATH {
-            return Some(&mut self.root)
+            return Some(&mut self.root);
         }
         // Remove root (#@)
         let path = path.strip_prefix(ROOT_PATH).unwrap_or(path);
@@ -62,7 +88,7 @@ impl ScopeRoot {
     }
     pub fn find_variable_at(&mut self, path: &str, name: &str) -> Option<LVariable> {
         if path == ROOT_PATH {
-            return None
+            return None;
         }
         // Remove root (#@)
         let mut path = path.strip_prefix(ROOT_PATH).unwrap_or(path);

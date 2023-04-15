@@ -1,9 +1,18 @@
 fn putchar(char: i32) -> (i32);
 
-putchar('H')
-putchar('i')
-putchar('i')
-putchar('i')
-putchar('\n')
+fn say_hi() -> (i32) {
+  putchar('H')
+  putchar('i')
+  putchar('i')
+  putchar('i')
+  putchar('\n')
+
+  return 0
+}
+
+a: i32 = 0
+b: i32 = 0
+
+say_hi()
 
 return 0

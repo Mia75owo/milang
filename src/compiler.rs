@@ -61,16 +61,8 @@ impl Compiler {
             return_type: "i32".to_owned(),
             stmts: file,
         };
+        declare_function(&mut self.module, &mut self.scope, ROOT_PATH, &main_func);
         self.compile_function(main_func, ROOT_PATH)?;
-
-        //for expr in file {
-            //match expr {
-                //Expr::Function(func) => {
-                    //self.compile_function(func, ROOT_PATH)?;
-                //},
-                //_ => panic!()
-            //}
-        //}
 
         let object = self.module.finish();
         Ok(object)
@@ -105,15 +97,12 @@ impl Compiler {
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
         let entry_block = builder.create_block();
-        builder
-            .append_block_params_for_function_params(entry_block);
+        builder.append_block_params_for_function_params(entry_block);
 
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let function_scope = self
-            .scope
-            .create_scope_for_variable_at(scope, &name);
+        let function_scope = self.scope.create_scope_for_variable_at(scope, &name);
 
         let mut func_compiler = FunctionCompiler::new(
             &mut self.module,
@@ -126,6 +115,8 @@ impl Compiler {
         for expr in stmts {
             func_compiler.translate_expr(expr);
         }
+
+        let functions_to_compile = func_compiler.destroy();
 
         // TODO: use name convention for scoping
         let id = self
@@ -145,26 +136,10 @@ impl Compiler {
             .define_function(id, &mut self.ctx)
             .map_err(|e| e.to_string())?;
 
-        // Scope
-
-        let func = Expr::DefFunc {
-            name: name.to_owned(),
-            params,
-            return_type,
-        };
-
-        let func_type = LType::parse_function(func).unwrap();
-        let func_value = LValue::Function(
-            LFunctionValue::gen_from_function_type(func_type.clone(), &mut self.module).unwrap(),
-        );
-
-        let variable = LVariable {
-            ltype: func_type,
-            lvalue: func_value,
-        };
-
-        self.scope
-            .insert_variable_at(scope, &name, variable);
+        for (path, func) in functions_to_compile {
+            self.module.clear_context(&mut self.ctx);
+            self.compile_function(func, &path)?;
+        }
 
         Ok(())
     }
@@ -199,6 +174,7 @@ impl<'a> FunctionCompiler<'a> {
     }
 
     pub fn destroy(self) -> Vec<(String, FunctionExpr)> {
+        self.builder.finalize();
         self.functions_to_compile
     }
 
@@ -333,7 +309,9 @@ impl<'a> FunctionCompiler<'a> {
             }
 
             Expr::Function(func) => {
-                self.functions_to_compile.push((self.current_scope.clone(), func));
+                declare_function(self.module, self.scope, &self.current_scope, &func);
+                self.functions_to_compile
+                    .push((self.current_scope.clone(), func));
 
                 self.builder.ins().iconst(types::I64, 0)
             }
@@ -520,4 +498,29 @@ impl<'a> FunctionCompiler<'a> {
 
         variable
     }
+
+}
+fn declare_function(
+    module: &mut ObjectModule,
+    scope_root: &mut ScopeRoot,
+    current_scope: &str,
+    func: &FunctionExpr,
+) {
+    let new_func = Expr::DefFunc {
+        name: func.name.to_owned(),
+        params: func.params.clone(),
+        return_type: func.return_type.to_owned(),
+    };
+
+    let func_type = LType::parse_function(new_func).unwrap();
+    let func_value = LValue::Function(
+        LFunctionValue::gen_from_function_type(func_type.clone(), module).unwrap(),
+    );
+
+    let variable = LVariable {
+        ltype: func_type,
+        lvalue: func_value,
+    };
+
+    scope_root.insert_variable_at(current_scope, &func.name, variable);
 }
