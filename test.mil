@@ -1,13 +1,9 @@
-fn main() -> (i32) {
-    fn putchar(char: i32) -> (i32);
+fn putchar(char: i32) -> (i32);
 
-    putchar('H')
-    putchar('i')
-    putchar('i')
-    putchar('i')
-    putchar('\n')
+putchar('H')
+putchar('i')
+putchar('i')
+putchar('i')
+putchar('\n')
 
-    return 0
-}
-
-
+return 0

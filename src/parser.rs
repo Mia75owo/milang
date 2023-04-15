@@ -27,6 +27,7 @@ pub enum Expr {
         params: Vec<NameType>,
         return_type: String,
     },
+    Function(FunctionExpr),
     Return(Box<Expr>),
 }
 
@@ -39,18 +40,18 @@ pub struct FunctionExpr {
 }
 
 peg::parser!(pub grammar parser() for str {
-    pub rule file() -> Vec<FunctionExpr>
-        = _ func:( function()*) { func }
+    pub rule file() -> Vec<Expr>
+        = stmts:statements() { stmts }
 
-    pub rule function() -> FunctionExpr
+    pub rule function() -> Expr
         = "fn" _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:identifier() _ {(n, t)}) ** ",") ")" _
         "->" _
         "(" return_type:identifier() ")" _
         "{" _
         stmts:statements()
-        _ "}" _
-        { FunctionExpr { name, params, return_type, stmts } }
+        _ "}"
+        { Expr::Function(FunctionExpr { name, params, return_type, stmts }) }
 
     rule def_func() -> Expr
         = "fn" _ name:identifier() _
@@ -63,10 +64,11 @@ peg::parser!(pub grammar parser() for str {
         = s:(statement()*) { s }
 
     rule statement() -> Expr
-        = _ e:def_func() { e }
-        / _ e:def_var() { e }
-        / _ e:return_expr() { e }
-        / _ e:expression() { e }
+        = _ e:function() _ { e }
+        / _ e:return_expr() _ { e }
+        / _ e:def_func() _ { e }
+        / _ e:def_var() _ { e }
+        / _ e:expression() _ { e }
 
     rule expression() -> Expr
         = if_else()

@@ -1,18 +1,207 @@
 use crate::prelude::*;
 
-use cranelift::prelude::*;
+use cranelift::{
+    codegen::verify_function,
+    prelude::{settings::FlagsOrIsa, *},
+};
 use cranelift_module::{/*DataContext, */ Linkage, Module};
-use cranelift_object::ObjectModule;
+use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 
-pub struct Translator<'a> {
+pub struct Compiler {
+    pub builder_context: FunctionBuilderContext,
+    pub ctx: codegen::Context,
+    pub module: ObjectModule,
+    pub scope: ScopeRoot,
+
+    pub variable_index: usize,
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        let mut flag_builder = settings::builder();
+        flag_builder.set("use_colocated_libcalls", "false").unwrap();
+        flag_builder.set("is_pic", "false").unwrap();
+
+        let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
+            panic!("Host machine is not supported: {msg}");
+        });
+
+        let isa = isa_builder
+            .finish(settings::Flags::new(flag_builder))
+            .unwrap();
+
+        let builder =
+            ObjectBuilder::new(isa, "milang", cranelift_module::default_libcall_names()).unwrap();
+
+        let module = ObjectModule::new(builder);
+
+        let builder_context = FunctionBuilderContext::new();
+        let ctx = module.make_context();
+        //let data_ctx = DataContext::new();
+        let scope = ScopeRoot::default();
+
+        Self {
+            builder_context,
+            ctx,
+            module,
+            scope,
+            variable_index: 0,
+        }
+    }
+}
+
+impl Compiler {
+    pub fn compile(mut self, input: &str) -> Result<ObjectProduct, String> {
+        let file = parser::file(input).map_err(|e| e.to_string())?;
+
+        // Generate a fake main function to encapsulate the code
+        let main_func = FunctionExpr {
+            name: "main".to_owned(),
+            params: vec![],
+            return_type: "i32".to_owned(),
+            stmts: file,
+        };
+        self.compile_function(main_func, ROOT_PATH)?;
+
+        //for expr in file {
+            //match expr {
+                //Expr::Function(func) => {
+                    //self.compile_function(func, ROOT_PATH)?;
+                //},
+                //_ => panic!()
+            //}
+        //}
+
+        let object = self.module.finish();
+        Ok(object)
+    }
+
+    pub fn compile_function(&mut self, func: FunctionExpr, scope: &str) -> Result<(), String> {
+        let FunctionExpr {
+            name,
+            params,
+            return_type,
+            stmts,
+        } = func;
+
+        // Declare the param types
+        for (_name, type_name) in &params {
+            let ptype =
+                LType::parse_basic(type_name).expect("Failed to parse type: '{type_name}'!");
+            let ptype = ptype.to_type();
+
+            self.ctx.func.signature.params.push(AbiParam::new(ptype));
+        }
+
+        let ret_type =
+            LType::parse_basic(&return_type).expect("Failed to parse type: '{type_name}'!");
+        let ret_type = ret_type.to_type();
+        self.ctx
+            .func
+            .signature
+            .returns
+            .push(AbiParam::new(ret_type));
+
+        let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+
+        let entry_block = builder.create_block();
+        builder
+            .append_block_params_for_function_params(entry_block);
+
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+
+        let function_scope = self
+            .scope
+            .create_scope_for_variable_at(scope, &name);
+
+        let mut func_compiler = FunctionCompiler::new(
+            &mut self.module,
+            &mut self.scope,
+            &mut self.variable_index,
+            builder,
+            &function_scope,
+        );
+
+        for expr in stmts {
+            func_compiler.translate_expr(expr);
+        }
+
+        // TODO: use name convention for scoping
+        let id = self
+            .module
+            .declare_function(&name, Linkage::Export, &self.ctx.func.signature)
+            .map_err(|e| e.to_string())?;
+
+        let flags = settings::Flags::new(settings::builder());
+        let flags_or_isa = FlagsOrIsa {
+            flags: &flags,
+            isa: None,
+        };
+
+        verify_function(&self.ctx.func, flags_or_isa).map_err(|e| e.to_string())?;
+
+        self.module
+            .define_function(id, &mut self.ctx)
+            .map_err(|e| e.to_string())?;
+
+        // Scope
+
+        let func = Expr::DefFunc {
+            name: name.to_owned(),
+            params,
+            return_type,
+        };
+
+        let func_type = LType::parse_function(func).unwrap();
+        let func_value = LValue::Function(
+            LFunctionValue::gen_from_function_type(func_type.clone(), &mut self.module).unwrap(),
+        );
+
+        let variable = LVariable {
+            ltype: func_type,
+            lvalue: func_value,
+        };
+
+        self.scope
+            .insert_variable_at(scope, &name, variable);
+
+        Ok(())
+    }
+}
+
+pub struct FunctionCompiler<'a> {
     pub builder: FunctionBuilder<'a>,
     pub module: &'a mut ObjectModule,
     pub scope: &'a mut ScopeRoot,
     pub variable_index: &'a mut usize,
     pub current_scope: String,
+
+    pub functions_to_compile: Vec<(String, FunctionExpr)>,
 }
 
-impl<'a> Translator<'a> {
+impl<'a> FunctionCompiler<'a> {
+    pub fn new(
+        module: &'a mut ObjectModule,
+        scope: &'a mut ScopeRoot,
+        variable_index: &'a mut usize,
+        builder: FunctionBuilder<'a>,
+        current_scope: &str,
+    ) -> Self {
+        Self {
+            builder,
+            module,
+            scope,
+            variable_index,
+            current_scope: current_scope.to_owned(),
+            functions_to_compile: vec![],
+        }
+    }
+
+    pub fn destroy(self) -> Vec<(String, FunctionExpr)> {
+        self.functions_to_compile
+    }
+
     pub fn translate_expr(&mut self, expr: Expr) -> Value {
         match expr {
             Expr::Literal(literal) => {
@@ -77,7 +266,7 @@ impl<'a> Translator<'a> {
             Expr::Gt(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThan, *lhs, *rhs),
             Expr::Ge(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThanOrEqual, *lhs, *rhs),
             Expr::Call(name, args) => self.translate_call(&name, args),
-            Expr::GlobalDataAddr(name) => self.translate_global_data_addr(name),
+            Expr::GlobalDataAddr(_name) => todo!(),
             Expr::Identifier(name) => {
                 let var = self
                     .scope
@@ -142,8 +331,64 @@ impl<'a> Translator<'a> {
 
                 ret
             }
+
+            Expr::Function(func) => {
+                self.functions_to_compile.push((self.current_scope.clone(), func));
+
+                self.builder.ins().iconst(types::I64, 0)
+            }
         }
     }
+
+    fn translate_icmp(&mut self, cmp: IntCC, lhs: Expr, rhs: Expr) -> Value {
+        let lhs = self.translate_expr(lhs);
+        let rhs = self.translate_expr(rhs);
+
+        let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
+
+        self.builder.ins().icmp(cmp, lhs, rhs)
+    }
+
+    // ===================
+    // Translate Variables
+    // ===================
+
+    fn translate_variable_declaration(&mut self, variable: &NameType, expr: Expr) -> Value {
+        let value = self.translate_expr(expr);
+        let variable = self.declare_variable(variable);
+
+        let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
+
+        self.builder.def_var(
+            variable
+                .get_cl_int_var()
+                .expect("Variable is not of type int!"),
+            value,
+        );
+        value
+    }
+
+    fn translate_assign(&mut self, variable: &str, expr: Expr) -> Value {
+        let value = self.translate_expr(expr);
+        let variable = self
+            .scope
+            .find_variable_at(&self.current_scope, variable)
+            .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
+
+        let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
+
+        self.builder.def_var(
+            variable
+                .get_cl_int_var()
+                .expect("Variable is not of type int!"),
+            value,
+        );
+        value
+    }
+
+    // ======================
+    // Translate Control flow
+    // ======================
 
     fn translate_if_else(
         &mut self,
@@ -225,48 +470,6 @@ impl<'a> Translator<'a> {
         self.builder.ins().iconst(int_type, 0)
     }
 
-    fn translate_variable_declaration(&mut self, variable: &NameType, expr: Expr) -> Value {
-        let value = self.translate_expr(expr);
-        let variable = self.declare_variable(variable);
-
-        let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
-
-        self.builder.def_var(
-            variable
-                .get_cl_int_var()
-                .expect("Variable is not of type int!"),
-            value,
-        );
-        value
-    }
-
-    fn translate_assign(&mut self, variable: &str, expr: Expr) -> Value {
-        let value = self.translate_expr(expr);
-        let variable = self
-            .scope
-            .find_variable_at(&self.current_scope, variable)
-            .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
-
-        let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
-
-        self.builder.def_var(
-            variable
-                .get_cl_int_var()
-                .expect("Variable is not of type int!"),
-            value,
-        );
-        value
-    }
-
-    fn translate_icmp(&mut self, cmp: IntCC, lhs: Expr, rhs: Expr) -> Value {
-        let lhs = self.translate_expr(lhs);
-        let rhs = self.translate_expr(rhs);
-
-        let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
-
-        self.builder.ins().icmp(cmp, lhs, rhs)
-    }
-
     fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Value {
         let func = self
             .scope
@@ -293,52 +496,6 @@ impl<'a> Translator<'a> {
         self.builder.inst_results(call)[0]
     }
 
-    fn translate_global_data_addr(&mut self, name: String) -> Value {
-        let sym = self
-            .module
-            .declare_data(&name, Linkage::Export, true, false)
-            .expect("problem declaring data object");
-
-        let local_id = self.module.declare_data_in_func(sym, self.builder.func);
-
-        let pointer = self.module.target_config().pointer_type();
-        self.builder.ins().symbol_value(pointer, local_id)
-    }
-
-    // ====================
-    // Predeclare Variables
-    // ====================
-
-    pub fn declare_variables_of_func(
-        &mut self,
-        params: &[NameType],
-        return_val: NameType,
-        stmts: &[Expr],
-        entry_block: Block,
-    ) {
-        for (i, variable) in params.iter().enumerate() {
-            let variable = self.declare_variable(variable);
-
-            let val = self.builder.block_params(entry_block)[i];
-            self.builder
-                .declare_var(variable.get_cl_int_var().unwrap(), variable.ltype.to_type());
-            self.builder
-                .def_var(variable.get_cl_int_var().unwrap(), val);
-
-            *self.variable_index += 1;
-        }
-
-        let variable = self.declare_variable(&return_val);
-        let zero = self.builder.ins().iconst(variable.ltype.to_type(), 0);
-        self.builder
-            .def_var(variable.get_cl_int_var().unwrap(), zero);
-        *self.variable_index += 1;
-
-        for expr in stmts {
-            self.declare_variables_in_stmt(expr);
-        }
-    }
-
     fn declare_variable(&mut self, variable: &NameType) -> LVariable {
         let (str_var_name, str_var_type) = variable;
 
@@ -363,32 +520,4 @@ impl<'a> Translator<'a> {
 
         variable
     }
-
-    fn declare_variables_in_stmt(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Assign(variable, expr) => {
-                self.translate_assign(variable, *expr.clone());
-            }
-            Expr::IfElse(ref _condition, ref _then_body, ref _else_body) => {
-                //for stmt in then_body {
-                //declare_variables_in_stmt(int, builder, variables, index, stmt);
-                //}
-                //for stmt in else_body {
-                //declare_variables_in_stmt(int, builder, variables, index, stmt);
-                //}
-                todo!()
-            }
-            Expr::WhileLoop(ref _condition, ref _loop_body) => {
-                //for stmt in loop_body {
-                //declare_variables_in_stmt(int, builder, variables, index, stmt);
-                //}
-                todo!()
-            }
-            _ => (),
-        }
-    }
-
-    //fn val_type(&self, val: Value) -> Type {
-    //self.builder.func.dfg.value_type(val)
-    //}
 }

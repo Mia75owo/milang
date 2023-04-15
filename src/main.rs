@@ -1,14 +1,16 @@
-use compiler::Compiler;
+//use compiler::Compiler;
+use comp::Compiler;
 
 pub mod cl_type;
-pub mod compiler;
+pub mod comp;
+//pub mod compiler;
 pub mod ltype;
 pub mod lvalue;
 pub mod parser;
 pub mod scope;
 #[cfg(test)]
 mod tests;
-pub mod translator;
+//pub mod translator;
 
 pub mod prelude {
     pub use crate::cl_type::*;
