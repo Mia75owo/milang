@@ -29,7 +29,7 @@ impl<'a> Translator<'a> {
                         ['\\', 'r'] => '\r',
                         ['\\', '0'] => '\0',
                         ['\\', '\\'] => '\\',
-                        _ => panic!("Failed to parse char: '{c}'")
+                        _ => panic!("Failed to parse char: '{c}'"),
                     }
                 } else {
                     panic!("Failed to parse char: '{c}'");
@@ -225,7 +225,7 @@ impl<'a> Translator<'a> {
         self.builder.ins().iconst(int_type, 0)
     }
 
-    fn translate_variable_declaration(&mut self, variable: &(String, String), expr: Expr) -> Value {
+    fn translate_variable_declaration(&mut self, variable: &NameType, expr: Expr) -> Value {
         let value = self.translate_expr(expr);
         let variable = self.declare_variable(variable);
 
@@ -305,10 +305,14 @@ impl<'a> Translator<'a> {
         self.builder.ins().symbol_value(pointer, local_id)
     }
 
-    pub fn declare_variables(
+    // ====================
+    // Predeclare Variables
+    // ====================
+
+    pub fn declare_variables_of_func(
         &mut self,
-        params: &[(String, String)],
-        return_val: (String, String),
+        params: &[NameType],
+        return_val: NameType,
         stmts: &[Expr],
         entry_block: Block,
     ) {
@@ -335,7 +339,7 @@ impl<'a> Translator<'a> {
         }
     }
 
-    fn declare_variable(&mut self, variable: &(String, String)) -> LVariable {
+    fn declare_variable(&mut self, variable: &NameType) -> LVariable {
         let (str_var_name, str_var_type) = variable;
 
         let var = Variable::new(*self.variable_index);

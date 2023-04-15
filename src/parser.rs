@@ -1,10 +1,12 @@
+pub type NameType = (String, String);
+
 /// The AST node for expressions.
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(String),
     Char(String),
     Identifier(String),
-    DefineVar((String, String), Box<Expr>),
+    DefineVar(NameType, Box<Expr>),
     Assign(String, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
@@ -22,7 +24,7 @@ pub enum Expr {
     GlobalDataAddr(String),
     DefFunc {
         name: String,
-        params: Vec<(String, String)>,
+        params: Vec<NameType>,
         return_type: String,
     },
     Return(Box<Expr>),
@@ -31,7 +33,7 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub struct FunctionExpr {
     pub name: String,
-    pub params: Vec<(String, String)>,
+    pub params: Vec<NameType>,
     pub return_type: String,
     pub stmts: Vec<Expr>,
 }
