@@ -1,5 +1,17 @@
 fn putchar(char: i32) -> (i32);
 
+putchar(foo())
+
+fn foo() -> (i8) {
+  fn baa() -> (i8) {
+    fn baz() -> (i8) {
+      return 'O'
+    }
+    return baz()
+  }
+  return baa()
+}
+
 fn say_hi() -> (i32) {
   putchar('H')
   putchar('i')
@@ -9,9 +21,6 @@ fn say_hi() -> (i32) {
 
   return 0
 }
-
-a: i32 = 0
-b: i32 = 0
 
 say_hi()
 

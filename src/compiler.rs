@@ -104,6 +104,14 @@ impl Compiler {
 
         let function_scope = self.scope.create_scope_for_variable_at(scope, &name);
 
+        for expr in &stmts {
+            match expr {
+                Expr::Function(func) => declare_function(&mut self.module, &mut self.scope, scope, func),
+                Expr::DefFunc(def) => declare_function_from_func_def(&mut self.module, &mut self.scope, scope, def),
+                _ => ()
+            }
+        }
+
         let mut func_compiler = FunctionCompiler::new(
             &mut self.module,
             &mut self.scope,
@@ -265,18 +273,8 @@ impl<'a> FunctionCompiler<'a> {
             Expr::WhileLoop(condition, loop_body) => {
                 self.translate_while_loop(*condition, loop_body)
             }
-            Expr::DefFunc {
-                name,
-                params,
-                return_type,
-            } => {
-                let func = Expr::DefFunc {
-                    name: name.clone(),
-                    params,
-                    return_type,
-                };
-
-                let func_type = LType::parse_function(func).unwrap();
+            Expr::DefFunc(func) => {
+                let func_type = LType::parse_function(&func).unwrap();
                 let func_value = LValue::Function(
                     LFunctionValue::gen_from_function_type(func_type.clone(), self.module).unwrap(),
                 );
@@ -287,7 +285,7 @@ impl<'a> FunctionCompiler<'a> {
                 };
 
                 self.scope
-                    .insert_variable_at(&self.current_scope, &name, variable);
+                    .insert_variable_at(&self.current_scope, &func.name, variable);
 
                 self.builder.ins().iconst(types::I64, 0)
             }
@@ -506,13 +504,37 @@ fn declare_function(
     current_scope: &str,
     func: &FunctionExpr,
 ) {
-    let new_func = Expr::DefFunc {
+    let new_func = DefFuncExpr {
         name: func.name.to_owned(),
         params: func.params.clone(),
         return_type: func.return_type.to_owned(),
     };
 
-    let func_type = LType::parse_function(new_func).unwrap();
+    let func_type = LType::parse_function(&new_func).unwrap();
+    let func_value = LValue::Function(
+        LFunctionValue::gen_from_function_type(func_type.clone(), module).unwrap(),
+    );
+
+    let variable = LVariable {
+        ltype: func_type,
+        lvalue: func_value,
+    };
+
+    scope_root.insert_variable_at(current_scope, &func.name, variable);
+}
+fn declare_function_from_func_def(
+    module: &mut ObjectModule,
+    scope_root: &mut ScopeRoot,
+    current_scope: &str,
+    func: &DefFuncExpr,
+) {
+    let new_func = DefFuncExpr {
+        name: func.name.to_owned(),
+        params: func.params.clone(),
+        return_type: func.return_type.to_owned(),
+    };
+
+    let func_type = LType::parse_function(&new_func).unwrap();
     let func_value = LValue::Function(
         LFunctionValue::gen_from_function_type(func_type.clone(), module).unwrap(),
     );

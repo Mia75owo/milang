@@ -209,3 +209,33 @@ return 0
     "#;
     compile(code).unwrap();
 }
+
+#[test]
+fn compile_scoping_levels() {
+    let code = r#"
+fn a() -> (i32) {
+    fn b() -> (i32) {
+        fn c() -> (i32) {
+            return 0
+        }
+        return c()
+    }
+    return b()
+}
+
+return a()
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_forward_declare() {
+    let code = r#"
+putchar('O')
+
+fn putchar(char: i32) -> (i32);
+
+return 0
+    "#;
+    compile(code).unwrap();
+}

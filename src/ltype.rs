@@ -1,6 +1,5 @@
+use crate::prelude::*;
 use cranelift::prelude::*;
-
-use crate::parser::Expr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LFunctionType {
@@ -43,35 +42,30 @@ impl LType {
             _ => None,
         }
     }
-    pub fn parse_function(input: Expr) -> Option<LType> {
-        match input {
-            Expr::DefFunc {
-                name,
-                params,
-                return_type,
-            } => {
-                let func = LFunctionType {
-                    name,
-                    params: params
-                        .iter()
-                        .map(|e| {
-                            (
-                                e.0.clone(),
-                                LType::parse_basic(&e.1)
-                                    .unwrap_or_else(|| panic!("Failed to parse type '{}'!", &e.1)),
-                            )
-                        })
-                        .collect(),
-                    return_type: Box::new(
-                        LType::parse_basic(&return_type).unwrap_or_else(|| {
-                            panic!("Failed to parse type '{}'!", &return_type)
-                        }),
-                    ),
-                };
-                Some(LType::LFunction(func))
-            }
-            _ => None,
-        }
+    pub fn parse_function(input: &DefFuncExpr) -> Option<LType> {
+        let DefFuncExpr {
+            name,
+            params,
+            return_type,
+        } = input;
+        let func = LFunctionType {
+            name: name.clone(),
+            params: params
+                .iter()
+                .map(|e| {
+                    (
+                        e.0.clone(),
+                        LType::parse_basic(&e.1)
+                            .unwrap_or_else(|| panic!("Failed to parse type '{}'!", &e.1)),
+                    )
+                })
+                .collect(),
+            return_type: Box::new(
+                LType::parse_basic(return_type)
+                    .unwrap_or_else(|| panic!("Failed to parse type '{}'!", &return_type)),
+            ),
+        };
+        Some(LType::LFunction(func))
     }
     pub fn to_type(&self) -> types::Type {
         match self {

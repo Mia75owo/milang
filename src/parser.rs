@@ -22,13 +22,16 @@ pub enum Expr {
     WhileLoop(Box<Expr>, Vec<Expr>),
     Call(String, Vec<Expr>),
     GlobalDataAddr(String),
-    DefFunc {
-        name: String,
-        params: Vec<NameType>,
-        return_type: String,
-    },
+    DefFunc(DefFuncExpr),
     Function(FunctionExpr),
     Return(Box<Expr>),
+}
+
+#[derive(Debug, Clone)]
+pub struct DefFuncExpr {
+    pub name: String,
+    pub params: Vec<NameType>,
+    pub return_type: String,
 }
 
 #[derive(Debug, Clone)]
@@ -58,7 +61,7 @@ peg::parser!(pub grammar parser() for str {
         "(" params:((_ n:identifier() _ ":" _ t:identifier() _ {(n, t)}) ** ",") ")" _
         "->" _
         "(" returns:identifier() ")" ";"
-        { Expr::DefFunc {name, params, return_type: returns } }
+        { Expr::DefFunc(DefFuncExpr { name, params, return_type: returns }) }
 
     rule statements() -> Vec<Expr>
         = s:(statement()*) { s }
