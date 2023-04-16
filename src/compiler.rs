@@ -4,7 +4,7 @@ use cranelift::{
     codegen::verify_function,
     prelude::{settings::FlagsOrIsa, *},
 };
-use cranelift_module::{/*DataContext, */ Linkage, Module};
+use cranelift_module::{DataContext, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 
 pub struct Compiler {
@@ -37,7 +37,6 @@ impl Default for Compiler {
 
         let builder_context = FunctionBuilderContext::new();
         let ctx = module.make_context();
-        //let data_ctx = DataContext::new();
         let scope = ScopeRoot::default();
 
         Self {
@@ -106,9 +105,13 @@ impl Compiler {
 
         for expr in &stmts {
             match expr {
-                Expr::Function(func) => declare_function(&mut self.module, &mut self.scope, scope, func),
-                Expr::DefFunc(def) => declare_function_from_func_def(&mut self.module, &mut self.scope, scope, def),
-                _ => ()
+                Expr::Function(func) => {
+                    declare_function(&mut self.module, &mut self.scope, scope, func)
+                }
+                Expr::DefFunc(def) => {
+                    declare_function_from_func_def(&mut self.module, &mut self.scope, scope, def)
+                }
+                _ => (),
             }
         }
 
@@ -144,8 +147,10 @@ impl Compiler {
             .define_function(id, &mut self.ctx)
             .map_err(|e| e.to_string())?;
 
+        println!("{}", self.ctx.func.display());
+
+        self.module.clear_context(&mut self.ctx);
         for (path, func) in functions_to_compile {
-            self.module.clear_context(&mut self.ctx);
             self.compile_function(func, &path)?;
         }
 
@@ -195,21 +200,25 @@ impl<'a> FunctionCompiler<'a> {
             Expr::Char(c) => {
                 let c = if c.len() == 1 {
                     c.chars().next().unwrap()
-                } else if c.len() == 2 {
-                    match &c.chars().collect::<Vec<char>>()[..] {
-                        ['\\', 'n'] => '\n',
-                        ['\\', 't'] => '\t',
-                        ['\\', 'r'] => '\r',
-                        ['\\', '0'] => '\0',
-                        ['\\', '\\'] => '\\',
-                        _ => panic!("Failed to parse char: '{c}'"),
-                    }
                 } else {
                     panic!("Failed to parse char: '{c}'");
                 };
 
                 let imm = c as u8;
                 self.builder.ins().iconst(types::I8, imm as i64)
+            }
+            Expr::String(s) => {
+                let mut bytes = s.as_bytes().to_vec();
+                bytes.push(b'\0');
+                let bytes = bytes.into_boxed_slice();
+
+                let mut data_ctx = DataContext::new();
+
+                data_ctx.define(bytes);
+                let msg_id = self.module.declare_anonymous_data(false, false).unwrap();
+                let _ = self.module.define_data(msg_id, &data_ctx);
+                let local_msg_id = self.module.declare_data_in_func(msg_id, self.builder.func);
+                self.builder.ins().global_value(types::I64, local_msg_id)
             }
             Expr::Add(lhs, rhs) => {
                 let lhs = self.translate_expr(*lhs);
@@ -250,7 +259,10 @@ impl<'a> FunctionCompiler<'a> {
             Expr::Gt(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThan, *lhs, *rhs),
             Expr::Ge(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThanOrEqual, *lhs, *rhs),
             Expr::Call(name, args) => self.translate_call(&name, args),
-            Expr::GlobalDataAddr(_name) => todo!(),
+            Expr::GlobalDataAddr(_name) => {
+                // NOTE: this is just used to test new features at the moment
+                self.builder.ins().iconst(types::I64, 0)
+            }
             Expr::Identifier(name) => {
                 let var = self
                     .scope
@@ -496,7 +508,6 @@ impl<'a> FunctionCompiler<'a> {
 
         variable
     }
-
 }
 fn declare_function(
     module: &mut ObjectModule,

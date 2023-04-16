@@ -5,6 +5,7 @@ pub type NameType = (String, String);
 pub enum Expr {
     Literal(String),
     Char(String),
+    String(String),
     Identifier(String),
     DefineVar(NameType, Box<Expr>),
     Assign(String, Box<Expr>),
@@ -46,7 +47,7 @@ peg::parser!(pub grammar parser() for str {
     pub rule file() -> Vec<Expr>
         = stmts:statements() { stmts }
 
-    pub rule function() -> Expr
+    rule function() -> Expr
         = "fn" _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:identifier() _ {(n, t)}) ** ",") ")" _
         "->" _
@@ -116,6 +117,7 @@ peg::parser!(pub grammar parser() for str {
         a:@ _ "/" _ b:(@) { Expr::Div(Box::new(a), Box::new(b)) }
         --
         c:char() { c }
+        s:string() { s }
         i:identifier() _ "(" args:((_ e:expression() _ {e}) ** ",") ")" { Expr::Call(i, args) }
         i:identifier() { Expr::Identifier(i) }
         l:literal() { l }
@@ -129,8 +131,20 @@ peg::parser!(pub grammar parser() for str {
         = n:$(['0'..='9']+) { Expr::Literal(n.to_owned()) }
         / "&" i:identifier() { Expr::GlobalDataAddr(i) }
 
+    rule string_escape() -> String
+        = s:$(quiet!{"\\n"}) { "\n".to_string() }
+        / s:$(quiet!{"\\r"}) { "\r".to_string() }
+        / s:$(quiet!{"\\t"}) { "\t".to_string() }
+        / s:$(quiet!{"\\0"}) { "\0".to_string() }
+        / quiet!{"\\"} c:$([_]) { c.to_string() }
+    rule string_literal_char() -> String
+        = string_escape()
+        / s:$([^'\"']) { s.to_owned() }
+    rule string() -> Expr
+        = quiet!{"\"" s:string_literal_char()* "\"" { Expr::String(s.join("")) }}
+
     rule char() -> Expr
-        = "'" c:$("\\"? [_]) "'" { Expr::Char(c.to_owned()) }
+        = "'" c:string_literal_char() "'" { Expr::Char(c.to_owned()) }
 
     rule _() =  quiet!{[' ' | '\t' | '\n']*}
 });

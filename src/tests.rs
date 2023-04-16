@@ -178,8 +178,18 @@ return 0
 }
 
 #[test]
+#[should_panic]
 fn compile_typecheck_false() {
-    // TODO: falsy typechecks
+    let code = r#"
+fn foo() -> (i32) {
+    return 0
+}
+
+baa: i64 = foo
+
+return 0
+    "#;
+    compile(code).unwrap();
 }
 
 #[test]
@@ -234,6 +244,36 @@ fn compile_forward_declare() {
 putchar('O')
 
 fn putchar(char: i32) -> (i32);
+
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_char() {
+    let code = r#"
+a: i8 = 'a'
+b: i8 = 'b'
+c: i8 = 'c'
+nl: i8 = '\n'
+cr: i8 = '\r'
+bs: i8 = '\b'
+
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_string() {
+    let code = r#"
+a: i64 = ""
+b: i64 = "abc"
+c: i64 = "abcdefghijklmnopqrstuvwxyz"
+nl: i64 = "abc\ndef"
+cr: i64 = "\"hi\""
+bs: i64 = "\"\r\\foo\n\b\"\0"
 
 return 0
     "#;
