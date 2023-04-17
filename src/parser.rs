@@ -1,4 +1,10 @@
-pub type NameType = (String, String);
+pub type NameType = (String, TypeExpr);
+
+#[derive(Debug, Clone)]
+pub enum TypeExpr {
+    Ident(String),
+    Array(Box<TypeExpr>, Box<Expr>),
+}
 
 /// The AST node for expressions.
 #[derive(Debug, Clone)]
@@ -6,6 +12,8 @@ pub enum Expr {
     Literal(String),
     Char(String),
     String(String),
+    Array(TypeExpr, Vec<Expr>),
+    ArrayAccess(Box<Expr>, Box<Expr>),
     Identifier(String),
     DefineVar(NameType, Box<Expr>),
     Assign(String, Box<Expr>),
@@ -32,14 +40,14 @@ pub enum Expr {
 pub struct DefFuncExpr {
     pub name: String,
     pub params: Vec<NameType>,
-    pub return_type: String,
+    pub return_type: TypeExpr,
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionExpr {
     pub name: String,
     pub params: Vec<NameType>,
-    pub return_type: String,
+    pub return_type: TypeExpr,
     pub stmts: Vec<Expr>,
 }
 
@@ -49,9 +57,9 @@ peg::parser!(pub grammar parser() for str {
 
     rule function() -> Expr
         = "fn" _ name:identifier() _
-        "(" params:((_ n:identifier() _ ":" _ t:identifier() _ {(n, t)}) ** ",") ")" _
+        "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
         "->" _
-        "(" return_type:identifier() ")" _
+        "(" return_type:var_type() ")" _
         "{" _
         stmts:statements()
         _ "}"
@@ -59,9 +67,9 @@ peg::parser!(pub grammar parser() for str {
 
     rule def_func() -> Expr
         = "fn" _ name:identifier() _
-        "(" params:((_ n:identifier() _ ":" _ t:identifier() _ {(n, t)}) ** ",") ")" _
+        "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
         "->" _
-        "(" returns:identifier() ")" ";"
+        "(" returns:var_type() ")" ";"
         { Expr::DefFunc(DefFuncExpr { name, params, return_type: returns }) }
 
     rule statements() -> Vec<Expr>
@@ -74,6 +82,7 @@ peg::parser!(pub grammar parser() for str {
         / _ e:def_var() _ { e }
         / _ e:expression() _ { e }
 
+    #[cache_left_rec]
     rule expression() -> Expr
         = if_else()
         / while_loop()
@@ -98,8 +107,9 @@ peg::parser!(pub grammar parser() for str {
         = i:identifier() _ "=" _ e:expression() { Expr::Assign(i, Box::new(e)) }
 
     rule def_var() -> Expr
-        = i:identifier() ":" _ t:identifier() _ "=" _ e:expression() { Expr::DefineVar((i, t), Box::new(e)) }
+        = i:identifier() ":" _ t:var_type() _ "=" _ e:expression() { Expr::DefineVar((i, t), Box::new(e)) }
 
+    #[cache_left_rec]
     rule binary_op() -> Expr = precedence!{
         "(" _ a:binary_op() _ ")" { a }
         --
@@ -120,6 +130,8 @@ peg::parser!(pub grammar parser() for str {
         s:string() { s }
         i:identifier() _ "(" args:((_ e:expression() _ {e}) ** ",") ")" { Expr::Call(i, args) }
         i:identifier() { Expr::Identifier(i) }
+        i:array_value() { i }
+        i:array_access() { i }
         l:literal() { l }
     }
 
@@ -130,6 +142,13 @@ peg::parser!(pub grammar parser() for str {
     rule literal() -> Expr
         = n:$(['0'..='9']+) { Expr::Literal(n.to_owned()) }
         / "&" i:identifier() { Expr::GlobalDataAddr(i) }
+
+    rule array_value() -> Expr
+        = "@" ty:var_type() "[" values:((_ v:expression() _ { v }) ** ",") "]" { Expr::Array(ty, values) }
+
+    #[cache_left_rec]
+    rule array_access() -> Expr
+        = i:expression() "[" _ index:expression() _ "]" { Expr::ArrayAccess(Box::new(i), Box::new(index)) }
 
     rule string_escape() -> String
         = s:$(quiet!{"\\n"}) { "\n".to_string() }
@@ -145,6 +164,10 @@ peg::parser!(pub grammar parser() for str {
 
     rule char() -> Expr
         = "'" c:string_literal_char() "'" { Expr::Char(c.to_owned()) }
+
+    rule var_type() -> TypeExpr
+        = "[" _ ty:var_type() _ ";" _ len:literal() "]" { TypeExpr::Array(Box::new(ty), Box::new(len)) }
+        / i:identifier() { TypeExpr::Ident(i) }
 
     rule _() =  quiet!{[' ' | '\t' | '\n']*}
 });

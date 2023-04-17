@@ -57,7 +57,7 @@ impl Compiler {
         let main_func = FunctionExpr {
             name: "main".to_owned(),
             params: vec![],
-            return_type: "i32".to_owned(),
+            return_type: TypeExpr::Ident("i32".to_owned()),
             stmts: file,
         };
         declare_function(&mut self.module, &mut self.scope, ROOT_PATH, &main_func);
@@ -78,14 +78,14 @@ impl Compiler {
         // Declare the param types
         for (_name, type_name) in &params {
             let ptype =
-                LType::parse_basic(type_name).expect("Failed to parse type: '{type_name}'!");
+                LType::parse_basic_ident(type_name).expect("Failed to parse type: '{type_name}'!");
             let ptype = ptype.to_type();
 
             self.ctx.func.signature.params.push(AbiParam::new(ptype));
         }
 
         let ret_type =
-            LType::parse_basic(&return_type).expect("Failed to parse type: '{type_name}'!");
+            LType::parse_basic_ident(&return_type).expect("Failed to parse type: '{type_name}'!");
         let ret_type = ret_type.to_type();
         self.ctx
             .func
@@ -207,6 +207,25 @@ impl<'a> FunctionCompiler<'a> {
                 let imm = c as u8;
                 self.builder.ins().iconst(types::I8, imm as i64)
             }
+            Expr::Array(ty, values) => {
+                let ltype = LType::parse_type(&ty).unwrap();
+                let type_size = LType::byte_size(&ltype);
+                let bytes = type_size * values.len();
+
+                let ss = self.builder.create_sized_stack_slot(StackSlotData {
+                    kind: StackSlotKind::ExplicitSlot,
+                    size: bytes as u32,
+                });
+
+                self.builder.ins().stack_addr(types::I64, ss, 0)
+            }
+            Expr::ArrayAccess(val, idx) => {
+                let val = self.translate_expr(*val);
+                let idx = self.translate_expr(*idx);
+
+                //self.builder.ins().stack_load(Mem, SS, Offset);
+                todo!()
+            },
             Expr::String(s) => {
                 let mut bytes = s.as_bytes().to_vec();
                 bytes.push(b'\0');
@@ -261,7 +280,21 @@ impl<'a> FunctionCompiler<'a> {
             Expr::Call(name, args) => self.translate_call(&name, args),
             Expr::GlobalDataAddr(_name) => {
                 // NOTE: this is just used to test new features at the moment
-                self.builder.ins().iconst(types::I64, 0)
+                let ss = self.builder.create_sized_stack_slot(StackSlotData {
+                    kind: StackSlotKind::ExplicitSlot,
+                    size: 4,
+                });
+
+                let val = self.builder.ins().iconst(types::I8, 1);
+                self.builder.ins().stack_store(val, ss, 0);
+                self.builder.ins().stack_store(val, ss, 1);
+                self.builder.ins().stack_store(val, ss, 2);
+                self.builder.ins().stack_store(val, ss, 3);
+
+                let new_val = self.builder.ins().stack_load(types::I64, ss, 0);
+
+                //self.builder.ins().iconst(types::I64, 65)
+                new_val
             }
             Expr::Identifier(name) => {
                 let var = self
@@ -490,8 +523,8 @@ impl<'a> FunctionCompiler<'a> {
         let var = Variable::new(*self.variable_index);
         *self.variable_index += 1;
 
-        let var_type = LType::parse_basic(str_var_type)
-            .unwrap_or_else(|| panic!("Failed to parse type: '{}'", &str_var_type));
+        let var_type = LType::parse_type(str_var_type)
+            .unwrap_or_else(|| panic!("Failed to parse type: '{:?}'", &str_var_type));
 
         let value = LValue::Int(LInt {
             //raw: 0,

@@ -1,5 +1,8 @@
 fn putchar(char: i32) -> (i32);
 fn puts(str: i64) -> (i32);
+fn printf(str: i64, arg: i64) -> (i32);
+fn getchar() -> (i32);
+fn exit(code: i32) -> (i32);
 
 putchar(foo())
 putchar('\n')
@@ -34,5 +37,22 @@ fn say_hi_str() -> (i32) {
 }
 
 say_hi_str()
+
+user_input: i8 = 0
+
+if user_input == 'y' {
+  puts("Yes :>")
+  0
+} else {
+  puts("No :<")
+  0
+}
+
+printf("%li\n", &a)
+
+hi: [i32; 1] = @i32[]
+putchar(hi)
+
+putchar('\n')
 
 return 0
