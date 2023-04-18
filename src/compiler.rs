@@ -304,7 +304,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 let val = var
                     .get_cl_int_var()
-                    .expect("Failed to get value from variable '{name}'");
+                    .unwrap_or_else(|| panic!("Failed to get value from variable '{name}'"));
 
                 self.builder.use_var(val)
             }
