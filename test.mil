@@ -76,4 +76,14 @@ putchar('\n')
   cool MULTILINE comment :D
 */
 
+if (1 == 1 && 2 == 2) {
+  putchar('y')
+  0
+} else {
+  putchar('n')
+  0
+}
+
+putchar('\n')
+
 return 0

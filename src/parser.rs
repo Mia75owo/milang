@@ -24,6 +24,8 @@ pub enum Expr {
     Le(Box<Expr>, Box<Expr>),
     Gt(Box<Expr>, Box<Expr>),
     Ge(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
@@ -132,6 +134,9 @@ peg::parser!(pub grammar parser() for str {
     #[cache_left_rec]
     rule binary_op() -> Expr = precedence!{
         "(" _ a:binary_op() _ ")" { a }
+        --
+        a:@ _ "&&" _ b:(@) { Expr::And(Box::new(a), Box::new(b)) }
+        a:@ _ "||" _ b:(@) { Expr::Or(Box::new(a), Box::new(b)) }
         --
         a:@ _ "==" _ b:(@) { Expr::Eq(Box::new(a), Box::new(b)) }
         a:@ _ "!=" _ b:(@) { Expr::Ne(Box::new(a), Box::new(b)) }

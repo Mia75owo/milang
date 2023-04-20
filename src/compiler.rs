@@ -301,6 +301,8 @@ impl<'a> FunctionCompiler<'a> {
             Expr::Le(lhs, rhs) => self.translate_icmp(IntCC::SignedLessThanOrEqual, *lhs, *rhs),
             Expr::Gt(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThan, *lhs, *rhs),
             Expr::Ge(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThanOrEqual, *lhs, *rhs),
+            Expr::And(lhs, rhs) => self.translate_and(*lhs, *rhs),
+            Expr::Or(lhs, rhs) => self.translate_or(*lhs, *rhs),
             Expr::Call(name, args) => self.translate_call(&name, args),
             Expr::GlobalDataAddr(_name) => {
                 // NOTE: this is just used to test new features at the moment
@@ -391,6 +393,38 @@ impl<'a> FunctionCompiler<'a> {
         let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
 
         self.builder.ins().icmp(cmp, lhs, rhs)
+    }
+    fn translate_and(&mut self, lhs: Expr, rhs: Expr) -> Value {
+        // (x && y)
+        // (x == 1 && y == 1)
+        // ((x + y) == 2)
+
+        let lhs = self.translate_expr(lhs);
+        let rhs = self.translate_expr(rhs);
+
+        let lhs = self.builder.ins().icmp_imm(IntCC::Equal, lhs, 1);
+        let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
+
+        let combined = self.builder.ins().iadd(lhs, rhs);
+        let res = self.builder.ins().icmp_imm(IntCC::Equal, combined, 2);
+
+        res
+    }
+    fn translate_or(&mut self, lhs: Expr, rhs: Expr) -> Value {
+        // (x || y)
+        // (x == 1 || y == 1)
+        // ((x + y) > 0)
+
+        let lhs = self.translate_expr(lhs);
+        let rhs = self.translate_expr(rhs);
+
+        let lhs = self.builder.ins().icmp_imm(IntCC::Equal, lhs, 1);
+        let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
+
+        let combined = self.builder.ins().iadd(lhs, rhs);
+        let res = self.builder.ins().icmp_imm(IntCC::SignedGreaterThan, combined, 0);
+
+        res
     }
 
     // ===================
