@@ -71,4 +71,9 @@ while (i < 3) {
 }
 putchar('\n')
 
+// cool comment :D
+/*
+  cool MULTILINE comment :D
+*/
+
 return 0

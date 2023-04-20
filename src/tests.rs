@@ -313,3 +313,24 @@ return 0
     "#;
     compile(code).unwrap();
 }
+
+#[test]
+fn compile_singleline_comment() {
+    let code = r#"
+// foo
+return 0 // baa
+// baz
+// // / //// hi
+    "#;
+    compile(code).unwrap();
+}
+#[test]
+fn compile_multiline_comment() {
+    let code = r#"
+/* foo */
+return /*inbetween :>*/ 0 /* baa
+baz
+// // /* /* / / hi */
+    "#;
+    compile(code).unwrap();
+}

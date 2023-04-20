@@ -193,5 +193,16 @@ peg::parser!(pub grammar parser() for str {
         / "[" _ ty:var_type() _ "]" { TypeExpr::Array(Box::new(ty), Box::new(Expr::Literal("0".to_owned()))) }
         / i:identifier() { TypeExpr::Ident(i) }
 
-    rule _() =  quiet!{[' ' | '\t' | '\n']*}
+    rule _() = ignore()*
+
+    rule ignore()
+        = whitespace()
+        / single_comment()
+        / multi_comment()
+    rule whitespace()
+        = quiet!{[' ' | '\t' | '\n']}
+    rule single_comment()
+        = "//" ([^'\n']*)
+    rule multi_comment()
+        = "/*" ((!"*/"[_])*) "*/"
 });
