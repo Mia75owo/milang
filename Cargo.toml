@@ -12,3 +12,6 @@ cranelift-module = "0.94.0"
 cranelift-native = "0.94.0"
 cranelift-object = "0.94.0"
 peg = "0.8.1"
+
+[features]
+trace = ["peg/trace"]

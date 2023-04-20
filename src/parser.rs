@@ -52,7 +52,20 @@ pub struct FunctionExpr {
 }
 
 peg::parser!(pub grammar parser() for str {
+    rule traced<T>(e: rule<T>) -> T =
+        &(input:$([_]*) {
+            #[cfg(feature = "trace")]
+            println!("[PEG_INPUT_START]\n{}\n[PEG_TRACE_START]", input);
+        })
+        e:e()? {?
+            #[cfg(feature = "trace")]
+            println!("[PEG_TRACE_STOP]");
+            e.ok_or("")
+        }
+
     pub rule file() -> Vec<Expr>
+        = stmts:traced(<_file()>) { stmts }
+    pub rule _file() -> Vec<Expr>
         = stmts:statements() { stmts }
 
     rule function() -> Expr
