@@ -39,6 +39,10 @@ fn say_hi_str() -> (i32) {
 say_hi_str()
 
 user_input: i8 = 0
+if (0) {
+  user_input = getchar()
+  0
+} else {0}
 
 if user_input == 'y' {
   puts("Yes :>")
@@ -48,11 +52,23 @@ if user_input == 'y' {
   0
 }
 
-printf("%li\n", &a)
+hi: [i8] = @i8['h', 'i', '!']
+i: i64 = 0
+while (i < 3) {
+  putchar(hi[i])
+  i = i + 1
+}
+putchar('\n')
 
-hi: [i32; 1] = @i32[]
-putchar(hi)
+hi[0] = 'H'
+hi[1] = 'e'
+hi[2] = 'y'
 
+i = 0
+while (i < 3) {
+  putchar(hi[i])
+  i = i + 1
+}
 putchar('\n')
 
 return 0

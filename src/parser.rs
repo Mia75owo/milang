@@ -17,6 +17,7 @@ pub enum Expr {
     Identifier(String),
     DefineVar(NameType, Box<Expr>),
     Assign(String, Box<Expr>),
+    AssignArray(Box<Expr>, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -95,8 +96,12 @@ peg::parser!(pub grammar parser() for str {
         / _ e:def_var() _ { e }
         / _ e:expression() _ { e }
 
-    #[cache_left_rec]
     rule expression() -> Expr
+        = assignment_array()
+        / array_access()
+        / _expression()
+    #[cache_left_rec]
+    rule _expression() -> Expr
         = if_else()
         / while_loop()
         / assignment()
@@ -118,6 +123,8 @@ peg::parser!(pub grammar parser() for str {
 
     rule assignment() -> Expr
         = i:identifier() _ "=" _ e:expression() { Expr::Assign(i, Box::new(e)) }
+    rule assignment_array() -> Expr
+        = i:array_access() _ "=" _ e:expression() { Expr::AssignArray(Box::new(i), Box::new(e)) }
 
     rule def_var() -> Expr
         = i:identifier() ":" _ t:var_type() _ "=" _ e:expression() { Expr::DefineVar((i, t), Box::new(e)) }
@@ -139,12 +146,13 @@ peg::parser!(pub grammar parser() for str {
         a:@ _ "*" _ b:(@) { Expr::Mul(Box::new(a), Box::new(b)) }
         a:@ _ "/" _ b:(@) { Expr::Div(Box::new(a), Box::new(b)) }
         --
+        i:array_access() { i }
+        --
         c:char() { c }
         s:string() { s }
         i:identifier() _ "(" args:((_ e:expression() _ {e}) ** ",") ")" { Expr::Call(i, args) }
         i:identifier() { Expr::Identifier(i) }
         i:array_value() { i }
-        i:array_access() { i }
         l:literal() { l }
     }
 
@@ -161,7 +169,8 @@ peg::parser!(pub grammar parser() for str {
 
     #[cache_left_rec]
     rule array_access() -> Expr
-        = i:expression() "[" _ index:expression() _ "]" { Expr::ArrayAccess(Box::new(i), Box::new(index)) }
+        = i:array_access() "[" _ index:expression() _ "]" { Expr::ArrayAccess(Box::new(i), Box::new(index)) }
+        / i:_expression() { i }
 
     rule string_escape() -> String
         = s:$(quiet!{"\\n"}) { "\n".to_string() }
@@ -179,7 +188,9 @@ peg::parser!(pub grammar parser() for str {
         = "'" c:string_literal_char() "'" { Expr::Char(c.to_owned()) }
 
     rule var_type() -> TypeExpr
+        //= "[" _ ty:var_type() _ ";" _ len:literal() "]" { TypeExpr::Array(Box::new(ty), Box::new(len)) }
         = "[" _ ty:var_type() _ ";" _ len:literal() "]" { TypeExpr::Array(Box::new(ty), Box::new(len)) }
+        / "[" _ ty:var_type() _ "]" { TypeExpr::Array(Box::new(ty), Box::new(Expr::Literal("0".to_owned()))) }
         / i:identifier() { TypeExpr::Ident(i) }
 
     rule _() =  quiet!{[' ' | '\t' | '\n']*}

@@ -217,15 +217,39 @@ impl<'a> FunctionCompiler<'a> {
                     size: bytes as u32,
                 });
 
+                for (i, value) in values.into_iter().enumerate() {
+                    let val = self.translate_expr(value);
+                    let val = cast_value(val, ltype.to_type(), true, &mut self.builder);
+
+                    let offset = (i * type_size) as i32;
+                    self.builder.ins().stack_store(val, ss, offset);
+                }
+
                 self.builder.ins().stack_addr(types::I64, ss, 0)
             }
             Expr::ArrayAccess(val, idx) => {
                 let val = self.translate_expr(*val);
                 let idx = self.translate_expr(*idx);
 
-                //self.builder.ins().stack_load(Mem, SS, Offset);
-                todo!()
-            },
+                let addr = self.builder.ins().iadd(val, idx);
+
+                self.builder.ins().load(types::I64, MemFlags::new(), addr, 0)
+            }
+            Expr::AssignArray(arr, val) => {
+                let (arr_val, arr_idx) = match *arr {
+                    Expr::ArrayAccess(val, idx) => (val, idx),
+                    _ => unreachable!()
+                };
+
+                let arr_val = self.translate_expr(*arr_val);
+                let arr_idx = self.translate_expr(*arr_idx);
+                let addr = self.builder.ins().iadd(arr_val, arr_idx);
+
+                let val = self.translate_expr(*val);
+
+                self.builder.ins().store(MemFlags::new(), val, addr, 0);
+                self.builder.ins().iconst(types::I64, 0)
+            }
             Expr::String(s) => {
                 let mut bytes = s.as_bytes().to_vec();
                 bytes.push(b'\0');
@@ -293,7 +317,6 @@ impl<'a> FunctionCompiler<'a> {
 
                 let new_val = self.builder.ins().stack_load(types::I64, ss, 0);
 
-                //self.builder.ins().iconst(types::I64, 65)
                 new_val
             }
             Expr::Identifier(name) => {

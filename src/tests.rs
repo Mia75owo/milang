@@ -279,3 +279,37 @@ return 0
     "#;
     compile(code).unwrap();
 }
+
+#[test]
+fn compile_array_def() {
+    let code = r#"
+a: [i8] = @i8['a', 'b', 'c']
+b: [i8; 3] = @i8['a', 'b', 'c']
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_array_access() {
+    let code = r#"
+arr: [i8] = @i8['a', 'b', 'c']
+a: i8 = arr[0]
+b: i8 = arr[1]
+c: i8 = arr[2]
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_array_assign() {
+    let code = r#"
+arr: [i8] = @i8['a', 'b', 'c']
+arr[0] = 'd'
+arr[1] = 'e'
+arr[2] = 'f'
+return 0
+    "#;
+    compile(code).unwrap();
+}
