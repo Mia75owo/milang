@@ -230,15 +230,18 @@ impl<'a> FunctionCompiler<'a> {
             Expr::ArrayAccess(val, idx) => {
                 let val = self.translate_expr(*val);
                 let idx = self.translate_expr(*idx);
+                let idx = cast_value(idx, types::I64, false, &mut self.builder);
 
                 let addr = self.builder.ins().iadd(val, idx);
 
-                self.builder.ins().load(types::I64, MemFlags::new(), addr, 0)
+                self.builder
+                    .ins()
+                    .load(types::I64, MemFlags::new(), addr, 0)
             }
             Expr::AssignArray(arr, val) => {
                 let (arr_val, arr_idx) = match *arr {
                     Expr::ArrayAccess(val, idx) => (val, idx),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
 
                 let arr_val = self.translate_expr(*arr_val);
@@ -422,7 +425,10 @@ impl<'a> FunctionCompiler<'a> {
         let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
 
         let combined = self.builder.ins().iadd(lhs, rhs);
-        let res = self.builder.ins().icmp_imm(IntCC::SignedGreaterThan, combined, 0);
+        let res = self
+            .builder
+            .ins()
+            .icmp_imm(IntCC::SignedGreaterThan, combined, 0);
 
         res
     }
