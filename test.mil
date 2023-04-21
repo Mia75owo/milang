@@ -86,11 +86,13 @@ if (1 == 1 && 2 == 2) {
 
 putchar('\n')
 
-/*test_var: i8 = 'a'
-fn test() -> (i32) {
-  putchar(test_var)
+test_var: [i8] = @i8['a']
+fn test(var: i64) -> (i32) {
+  putchar(var[0])
   return 0
 }
-test()*/
+test(test_var)
+
+putchar('\n')
 
 return 0

@@ -123,6 +123,8 @@ impl Compiler {
             &function_scope,
         );
 
+        func_compiler.declare_parameter_variables(entry_block, &params);
+
         for expr in stmts {
             func_compiler.translate_expr(expr);
         }
@@ -603,6 +605,15 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.declare_var(var, var_type.to_type());
 
         variable
+    }
+    fn declare_parameter_variables(&mut self, entry_block: Block, params: &[NameType]) {
+        for (i, param) in params.iter().enumerate() {
+            let var = self.declare_variable(param);
+            self.builder.def_var(
+                var.get_cl_int_var().unwrap(),
+                self.builder.block_params(entry_block)[i],
+            );
+        }
     }
 }
 fn declare_function(

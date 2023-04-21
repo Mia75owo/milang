@@ -209,6 +209,21 @@ return 0
 }
 
 #[test]
+fn compile_call_function_with_params() {
+    let code = r#"
+fn foo(a: i32) -> (i32) {
+    return a
+}
+
+foo(123)
+
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+
+#[test]
 fn compile_get_value_from_function_call() {
     let code = r#"
 fn foo() -> (i32) {
