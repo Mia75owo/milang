@@ -243,7 +243,7 @@ impl<'a> FunctionCompiler<'a> {
             Expr::AssignArray(arr, val) => {
                 let (arr_val, arr_idx) = match *arr {
                     Expr::ArrayAccess(val, idx) => (val, idx),
-                    _ => unreachable!(),
+                    _ => panic!("Can not index into non-array type!"),
                 };
 
                 let arr_val = self.translate_expr(*arr_val);
@@ -498,22 +498,34 @@ impl<'a> FunctionCompiler<'a> {
         // Then
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
+        /*
         let mut then_return = self.builder.ins().iconst(int_type, 0);
         for expr in then_body {
             then_return = self.translate_expr(expr);
         }
 
         self.builder.ins().jump(merge_block, &[then_return]);
+        */
+        for expr in then_body {
+            self.translate_expr(expr);
+        }
+        self.builder.ins().jump(merge_block, &[]);
 
         // Else
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
+        /*
         let mut else_return = self.builder.ins().iconst(int_type, 0);
         for expr in else_body {
             else_return = self.translate_expr(expr);
         }
 
         self.builder.ins().jump(merge_block, &[else_return]);
+        */
+        for expr in else_body {
+            self.translate_expr(expr);
+        }
+        self.builder.ins().jump(merge_block, &[]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);

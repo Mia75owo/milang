@@ -4,7 +4,9 @@ pub mod cl_type;
 pub mod compiler;
 pub mod ltype;
 pub mod lvalue;
-pub mod parser;
+//pub mod parser;
+//pub mod parser2;
+pub mod parser3;
 pub mod scope;
 #[cfg(test)]
 mod tests;
@@ -14,7 +16,7 @@ pub mod prelude {
     pub use crate::cl_type::*;
     pub use crate::ltype::*;
     pub use crate::lvalue::*;
-    pub use crate::parser::*;
+    pub use crate::parser3::*;
     pub use crate::scope::*;
 }
 

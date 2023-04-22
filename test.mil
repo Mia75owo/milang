@@ -41,15 +41,13 @@ say_hi_str()
 user_input: i8 = 0
 if (0) {
   user_input = getchar()
-  0
-} else {0}
+} else {}
+/*
 
 if user_input == 'y' {
   puts("Yes :>")
-  0
 } else {
   puts("No :<")
-  0
 }
 
 hi: [i8] = @i8['h', 'i', '!']
@@ -72,16 +70,12 @@ while (i < 3) {
 putchar('\n')
 
 // cool comment :D
-/*
   cool MULTILINE comment :D
-*/
 
 if (1 == 1 && 2 == 2) {
   putchar('y')
-  0
 } else {
   putchar('n')
-  0
 }
 
 putchar('\n')
@@ -94,5 +88,7 @@ fn test(var: i64) -> (i32) {
 test(test_var)
 
 putchar('\n')
+
+*/
 
 return 0
