@@ -1,7 +1,15 @@
+// 819 unop
+// 745 function def
+// 722 immediate cast
+// 712 advanced immediate cast
+// 682 && || instructions
+
 fn getchar() -> (i32);
 fn putchar(char: i32) -> (i32);
 fn exit(code: i32) -> (i32);
 fn printf(str: i64, v1: i64) -> (i32);
+
+exit(0)
 
 player: i8 = 0
 board: [i8] = @i8[

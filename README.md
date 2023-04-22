@@ -16,7 +16,7 @@ cargo test
 ## Using
 
 As this project is in a very unfinished state, the compiler only reads from the
-hardcoded `test.mil` file and directly invokes hardcoded compiler and linker
+hardcoded `tictactoe.mil` file and directly invokes hardcoded compiler and linker
 commands (found in `src/main.rs`).
 
 ```console

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::prelude::*;
 
 use cranelift::{
@@ -132,7 +134,7 @@ impl Compiler {
         func_compiler.declare_parameter_variables(entry_block, &params);
 
         for expr in stmts {
-            func_compiler.translate_expr(expr);
+            func_compiler.translate_statement(expr);
         }
 
         let functions_to_compile = func_compiler.destroy();
@@ -173,6 +175,7 @@ pub struct FunctionCompiler<'a> {
     pub variable_index: &'a mut usize,
     pub current_scope: String,
 
+    pub importet_functions: HashMap<String, codegen::ir::FuncRef>,
     pub functions_to_compile: Vec<(String, FunctionExpr)>,
 }
 
@@ -190,6 +193,7 @@ impl<'a> FunctionCompiler<'a> {
             scope,
             variable_index,
             current_scope: current_scope.to_owned(),
+            importet_functions: HashMap::new(),
             functions_to_compile: vec![],
         }
     }
@@ -199,11 +203,137 @@ impl<'a> FunctionCompiler<'a> {
         self.functions_to_compile
     }
 
-    pub fn translate_expr(&mut self, expr: Expr) -> Value {
+    pub fn translate_statement(&mut self, expr: Expr) {
+        match expr {
+            Expr::Call(name, args) => _ = self.translate_call(&name, args),
+            Expr::Assign(var, expr) => match *var {
+                Expr::Identifier(name) => self.translate_assign(&name, *expr),
+                Expr::ArrayAccess(arr, idx, ty) => {
+                    self.translate_assign_array(*arr, *idx, *expr, ty)
+                }
+                _ => panic!("Can not assign to value!"),
+            },
+            Expr::DefineVar(name_and_type, expr) => {
+                self.translate_variable_declaration(&name_and_type, *expr)
+            }
+            Expr::IfElse(condition, then_body, else_body) => {
+                self.translate_if_else(*condition, then_body, else_body)
+            }
+            Expr::WhileLoop(condition, loop_body) => {
+                self.translate_while_loop(*condition, loop_body)
+            }
+            Expr::DefFunc(func) => {
+                let func_type = LType::parse_function(&func).unwrap();
+                let func_value = LValue::Function(
+                    LFunctionValue::gen_from_function_type(func_type.clone(), self.module).unwrap(),
+                );
+
+                let variable = LVariable {
+                    ltype: func_type,
+                    lvalue: func_value,
+                };
+
+                self.scope
+                    .insert_variable_at(&self.current_scope, &func.name, variable);
+            }
+            Expr::Return(expr) => {
+                let ret_type = self
+                    .builder
+                    .func
+                    .signature
+                    .returns
+                    .first()
+                    .unwrap()
+                    .value_type;
+
+                let ret = self.translate_value(*expr, Some(ret_type));
+                let ret = cast_value(ret, ret_type, true, &mut self.builder);
+                self.builder.ins().return_(&[ret]);
+            }
+
+            Expr::Function(func) => {
+                declare_function(self.module, self.scope, &self.current_scope, &func);
+                self.functions_to_compile
+                    .push((self.current_scope.clone(), func));
+            }
+            _ => panic!("Expression is not a statement!"),
+        }
+    }
+    pub fn expr_value_type(&mut self, expr: &Expr) -> Type {
+        match expr {
+            Expr::Literal(_) => types::I64,
+            Expr::Char(_) => types::I8,
+            Expr::Array(_, _) => types::I64,
+            Expr::ArrayAccess(_, _, ty) => {
+                if let Some(ty) = ty {
+                    LType::parse_type(ty).unwrap().to_type()
+                } else {
+                    types::I64
+                }
+            }
+            Expr::String(_) => types::I64,
+            Expr::Add(lhs, rhs) => {
+                let lhs = self.expr_value_type(lhs);
+                let rhs = self.expr_value_type(rhs);
+                choose_type(lhs, rhs)
+            }
+            Expr::Sub(lhs, rhs) => {
+                let lhs = self.expr_value_type(lhs);
+                let rhs = self.expr_value_type(rhs);
+                choose_type(lhs, rhs)
+            }
+            Expr::Mul(lhs, rhs) => {
+                let lhs = self.expr_value_type(lhs);
+                let rhs = self.expr_value_type(rhs);
+                choose_type(lhs, rhs)
+            }
+            Expr::Div(lhs, rhs) => {
+                let lhs = self.expr_value_type(lhs);
+                let rhs = self.expr_value_type(rhs);
+                choose_type(lhs, rhs)
+            }
+            Expr::Eq(_, _) => types::I8,
+            Expr::Ne(_, _) => types::I8,
+            Expr::Lt(_, _) => types::I8,
+            Expr::Le(_, _) => types::I8,
+            Expr::Gt(_, _) => types::I8,
+            Expr::Ge(_, _) => types::I8,
+            Expr::And(_, _) => types::I8,
+            Expr::Or(_, _) => types::I8,
+            Expr::Call(name, _) => {
+                let func = self
+                    .scope
+                    .find_variable_at(&self.current_scope, name)
+                    .unwrap_or_else(|| panic!("Did not find function '{name}' in scope!"));
+
+                let func = match func.lvalue {
+                    LValue::Function(f) => f,
+                    _ => panic!("'{name}' is not a function!"),
+                };
+
+                func.signature.returns[0].value_type
+            }
+            Expr::GlobalDataAddr(_name) => types::I64,
+            Expr::Identifier(name) => {
+                let var = self
+                    .scope
+                    .find_variable_at(&self.current_scope, name)
+                    .unwrap_or_else(|| panic!("Variable '{name}' not defined!"));
+                var.ltype.to_type()
+            }
+            _ => panic!("Expression is not a value!"),
+        }
+    }
+
+    pub fn translate_value(&mut self, expr: Expr, try_type: Option<Type>) -> Value {
         match expr {
             Expr::Literal(literal) => {
                 let imm: i64 = literal.parse().unwrap();
-                self.builder.ins().iconst(types::I64, imm)
+                if let Some(ty) = try_type {
+                    self.builder.ins().iconst(ty, imm)
+                } else {
+                    self.builder.ins().iconst(types::I64, imm)
+                }
             }
             Expr::Char(c) => {
                 let c = if c.len() == 1 {
@@ -213,7 +343,12 @@ impl<'a> FunctionCompiler<'a> {
                 };
 
                 let imm = c as u8;
-                self.builder.ins().iconst(types::I8, imm as i64)
+
+                if let Some(ty) = try_type {
+                    self.builder.ins().iconst(ty, imm as i64)
+                } else {
+                    self.builder.ins().iconst(types::I8, imm as i64)
+                }
             }
             Expr::Array(ty, values) => {
                 let ltype = LType::parse_type(&ty).unwrap();
@@ -226,7 +361,7 @@ impl<'a> FunctionCompiler<'a> {
                 });
 
                 for (i, value) in values.into_iter().enumerate() {
-                    let val = self.translate_expr(value);
+                    let val = self.translate_value(value, Some(ltype.to_type()));
                     let val = cast_value(val, ltype.to_type(), true, &mut self.builder);
 
                     let offset = (i * type_size) as i32;
@@ -236,8 +371,8 @@ impl<'a> FunctionCompiler<'a> {
                 self.builder.ins().stack_addr(types::I64, ss, 0)
             }
             Expr::ArrayAccess(val, idx, ty) => {
-                let val = self.translate_expr(*val);
-                let idx = self.translate_expr(*idx);
+                let val = self.translate_value(*val, Some(types::I64));
+                let idx = self.translate_value(*idx, Some(types::I64));
                 let idx = cast_value(idx, types::I64, false, &mut self.builder);
 
                 let addr = self.builder.ins().iadd(val, idx);
@@ -248,9 +383,7 @@ impl<'a> FunctionCompiler<'a> {
                     types::I64
                 };
 
-                self.builder
-                    .ins()
-                    .load(load_type, MemFlags::new(), addr, 0)
+                self.builder.ins().load(load_type, MemFlags::new(), addr, 0)
             }
             Expr::String(s) => {
                 let mut bytes = s.as_bytes().to_vec();
@@ -266,32 +399,40 @@ impl<'a> FunctionCompiler<'a> {
                 self.builder.ins().global_value(types::I64, local_msg_id)
             }
             Expr::Add(lhs, rhs) => {
-                let lhs = self.translate_expr(*lhs);
-                let rhs = self.translate_expr(*rhs);
+                let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
+
+                let lhs = self.translate_value(*lhs, Some(ty));
+                let rhs = self.translate_value(*rhs, Some(ty));
 
                 let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
 
                 self.builder.ins().iadd(lhs, rhs)
             }
             Expr::Sub(lhs, rhs) => {
-                let lhs = self.translate_expr(*lhs);
-                let rhs = self.translate_expr(*rhs);
+                let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
+
+                let lhs = self.translate_value(*lhs, Some(ty));
+                let rhs = self.translate_value(*rhs, Some(ty));
 
                 let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
 
                 self.builder.ins().isub(lhs, rhs)
             }
             Expr::Mul(lhs, rhs) => {
-                let lhs = self.translate_expr(*lhs);
-                let rhs = self.translate_expr(*rhs);
+                let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
+
+                let lhs = self.translate_value(*lhs, Some(ty));
+                let rhs = self.translate_value(*rhs, Some(ty));
 
                 let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
 
                 self.builder.ins().imul(lhs, rhs)
             }
             Expr::Div(lhs, rhs) => {
-                let lhs = self.translate_expr(*lhs);
-                let rhs = self.translate_expr(*rhs);
+                let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
+
+                let lhs = self.translate_value(*lhs, Some(ty));
+                let rhs = self.translate_value(*rhs, Some(ty));
 
                 let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
 
@@ -335,66 +476,15 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.use_var(val)
             }
-            Expr::Assign(var, expr) => match *var {
-                Expr::Identifier(name) => self.translate_assign(&name, *expr),
-                Expr::ArrayAccess(arr, idx, ty) => self.translate_assign_array(*arr, *idx, *expr, ty),
-                _ => panic!("Can not assign to value!"),
-            },
-            Expr::DefineVar(name_and_type, expr) => {
-                self.translate_variable_declaration(&name_and_type, *expr)
-            }
-            Expr::IfElse(condition, then_body, else_body) => {
-                self.translate_if_else(*condition, then_body, else_body)
-            }
-            Expr::WhileLoop(condition, loop_body) => {
-                self.translate_while_loop(*condition, loop_body)
-            }
-            Expr::DefFunc(func) => {
-                let func_type = LType::parse_function(&func).unwrap();
-                let func_value = LValue::Function(
-                    LFunctionValue::gen_from_function_type(func_type.clone(), self.module).unwrap(),
-                );
-
-                let variable = LVariable {
-                    ltype: func_type,
-                    lvalue: func_value,
-                };
-
-                self.scope
-                    .insert_variable_at(&self.current_scope, &func.name, variable);
-
-                self.builder.ins().iconst(types::I64, 0)
-            }
-            Expr::Return(expr) => {
-                let ret_type = self
-                    .builder
-                    .func
-                    .signature
-                    .returns
-                    .first()
-                    .unwrap()
-                    .value_type;
-
-                let ret = self.translate_expr(*expr);
-                let ret = cast_value(ret, ret_type, true, &mut self.builder);
-                self.builder.ins().return_(&[ret]);
-
-                ret
-            }
-
-            Expr::Function(func) => {
-                declare_function(self.module, self.scope, &self.current_scope, &func);
-                self.functions_to_compile
-                    .push((self.current_scope.clone(), func));
-
-                self.builder.ins().iconst(types::I64, 0)
-            }
+            _ => panic!("Expression is not a value!"),
         }
     }
 
     fn translate_icmp(&mut self, cmp: IntCC, lhs: Expr, rhs: Expr) -> Value {
-        let lhs = self.translate_expr(lhs);
-        let rhs = self.translate_expr(rhs);
+        let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
+
+        let lhs = self.translate_value(lhs, Some(ty));
+        let rhs = self.translate_value(rhs, Some(ty));
 
         let (lhs, rhs) = cast_types((lhs, rhs), &mut self.builder);
 
@@ -405,9 +495,12 @@ impl<'a> FunctionCompiler<'a> {
         // (x == 1 && y == 1)
         // ((x + y) == 2)
 
-        let lhs = self.translate_expr(lhs);
-        let rhs = self.translate_expr(rhs);
+        let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
+        let lhs = self.translate_value(lhs, Some(ty));
+        let rhs = self.translate_value(rhs, Some(ty));
+
+        /*
         let lhs = self.builder.ins().icmp_imm(IntCC::Equal, lhs, 1);
         let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
 
@@ -415,15 +508,20 @@ impl<'a> FunctionCompiler<'a> {
         let res = self.builder.ins().icmp_imm(IntCC::Equal, combined, 2);
 
         res
+        */
+        self.builder.ins().band(lhs, rhs)
     }
     fn translate_or(&mut self, lhs: Expr, rhs: Expr) -> Value {
         // (x || y)
         // (x == 1 || y == 1)
         // ((x + y) > 0)
 
-        let lhs = self.translate_expr(lhs);
-        let rhs = self.translate_expr(rhs);
+        let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
+        let lhs = self.translate_value(lhs, Some(ty));
+        let rhs = self.translate_value(rhs, Some(ty));
+
+        /*
         let lhs = self.builder.ins().icmp_imm(IntCC::Equal, lhs, 1);
         let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
 
@@ -434,15 +532,17 @@ impl<'a> FunctionCompiler<'a> {
             .icmp_imm(IntCC::SignedGreaterThan, combined, 0);
 
         res
+        */
+        self.builder.ins().bor(lhs, rhs)
     }
 
     // ===================
     // Translate Variables
     // ===================
 
-    fn translate_variable_declaration(&mut self, variable: &NameType, expr: Expr) -> Value {
-        let value = self.translate_expr(expr);
+    fn translate_variable_declaration(&mut self, variable: &NameType, expr: Expr) {
         let variable = self.declare_variable(variable);
+        let value = self.translate_value(expr, Some(variable.ltype.to_type()));
 
         let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
 
@@ -452,16 +552,15 @@ impl<'a> FunctionCompiler<'a> {
                 .expect("Variable is not of type int!"),
             value,
         );
-        value
     }
 
-    fn translate_assign(&mut self, variable: &str, expr: Expr) -> Value {
+    fn translate_assign(&mut self, variable: &str, expr: Expr) {
         let variable = self
             .scope
             .find_variable_at(&self.current_scope, variable)
             .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
 
-        let value = self.translate_expr(expr);
+        let value = self.translate_value(expr, Some(variable.ltype.to_type()));
         let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
 
         self.builder.def_var(
@@ -470,41 +569,41 @@ impl<'a> FunctionCompiler<'a> {
                 .expect("Variable is not of type int!"),
             value,
         );
-        value
     }
-    fn translate_assign_array(&mut self, arr_val: Expr, arr_idx: Expr, expr: Expr, ty: Option<TypeExpr>) -> Value {
-        let arr_val = self.translate_expr(arr_val);
-        let arr_idx = self.translate_expr(arr_idx);
+    fn translate_assign_array(
+        &mut self,
+        arr_val: Expr,
+        arr_idx: Expr,
+        expr: Expr,
+        ty: Option<TypeExpr>,
+    ) {
+        let arr_val = self.translate_value(arr_val, Some(types::I64));
+        let arr_idx = self.translate_value(arr_idx, Some(types::I64));
         let addr = self.builder.ins().iadd(arr_val, arr_idx);
 
-        let mut val = self.translate_expr(expr);
-        if let Some(ty) = ty {
+        let val = if let Some(ty) = ty {
             let cl_type = LType::parse_type(&ty).unwrap().to_type();
-            val = cast_value(val, cl_type, true, &mut self.builder);
-        }
-
+            let val = self.translate_value(expr, Some(cl_type));
+            cast_value(val, cl_type, true, &mut self.builder)
+        } else {
+            let val = self.translate_value(expr, Some(types::I64));
+            cast_value(val, types::I64, true, &mut self.builder)
+        };
 
         self.builder.ins().store(MemFlags::new(), val, addr, 0);
-        self.builder.ins().iconst(types::I64, 0)
     }
 
     // ======================
     // Translate Control flow
     // ======================
 
-    fn translate_if_else(
-        &mut self,
-        condition: Expr,
-        then_body: Vec<Expr>,
-        else_body: Vec<Expr>,
-    ) -> Value {
-        let condition_value = self.translate_expr(condition);
+    fn translate_if_else(&mut self, condition: Expr, then_body: Vec<Expr>, else_body: Vec<Expr>) {
+        let condition_value = self.translate_value(condition, Some(types::I8));
 
         let then_block = self.builder.create_block();
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
-        let int_type = self.module.target_config().pointer_type();
         /*
         self.builder.append_block_param(merge_block, int_type);
         */
@@ -525,7 +624,7 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.ins().jump(merge_block, &[then_return]);
         */
         for expr in then_body {
-            self.translate_expr(expr);
+            self.translate_statement(expr);
         }
         self.builder.ins().jump(merge_block, &[]);
 
@@ -541,7 +640,7 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.ins().jump(merge_block, &[else_return]);
         */
         for expr in else_body {
-            self.translate_expr(expr);
+            self.translate_statement(expr);
         }
         self.builder.ins().jump(merge_block, &[]);
 
@@ -552,10 +651,9 @@ impl<'a> FunctionCompiler<'a> {
         let phi = self.builder.block_params(merge_block)[0];
         phi
         */
-        self.builder.ins().iconst(int_type, 0)
     }
 
-    fn translate_while_loop(&mut self, condition: Expr, loop_body: Vec<Expr>) -> Value {
+    fn translate_while_loop(&mut self, condition: Expr, loop_body: Vec<Expr>) {
         let header_block = self.builder.create_block();
         let body_block = self.builder.create_block();
         let exit_block = self.builder.create_block();
@@ -564,7 +662,7 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.ins().jump(header_block, &[]);
         self.builder.switch_to_block(header_block);
 
-        let condition_value = self.translate_expr(condition);
+        let condition_value = self.translate_value(condition, Some(types::I8));
         self.builder
             .ins()
             .brif(condition_value, body_block, &[], exit_block, &[]);
@@ -573,7 +671,7 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.switch_to_block(body_block);
         self.builder.seal_block(body_block);
         for expr in loop_body {
-            self.translate_expr(expr);
+            self.translate_statement(expr);
         }
 
         self.builder.ins().jump(header_block, &[]);
@@ -583,9 +681,6 @@ impl<'a> FunctionCompiler<'a> {
 
         self.builder.seal_block(header_block);
         self.builder.seal_block(exit_block);
-
-        let int_type = self.module.target_config().pointer_type();
-        self.builder.ins().iconst(int_type, 0)
     }
 
     fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Value {
@@ -601,11 +696,17 @@ impl<'a> FunctionCompiler<'a> {
 
         assert!(args.len() == func.signature.params.len());
 
-        let local_callee = func.declare_in_func(self.module, &mut self.builder);
+        let local_callee = if let Some(callee) = self.importet_functions.get(name) {
+            *callee
+        } else {
+            let callee = func.declare_in_func(self.module, &mut self.builder);
+            self.importet_functions.insert(name.to_owned(), callee);
+            callee
+        };
 
         let mut arg_values = Vec::new();
         for (arg, param) in args.into_iter().zip(func.signature.params.iter()) {
-            let val = self.translate_expr(arg);
+            let val = self.translate_value(arg, Some(param.value_type));
             let val = cast_value(val, param.value_type, true, &mut self.builder);
             arg_values.push(val);
         }
