@@ -4,9 +4,7 @@ pub mod cl_type;
 pub mod compiler;
 pub mod ltype;
 pub mod lvalue;
-//pub mod parser;
-//pub mod parser2;
-pub mod parser3;
+pub mod parser;
 pub mod scope;
 #[cfg(test)]
 mod tests;
@@ -16,12 +14,12 @@ pub mod prelude {
     pub use crate::cl_type::*;
     pub use crate::ltype::*;
     pub use crate::lvalue::*;
-    pub use crate::parser3::*;
+    pub use crate::parser::*;
     pub use crate::scope::*;
 }
 
 fn main() {
-    let code = std::fs::read_to_string("test.mil").expect("Failed to read file");
+    let code = std::fs::read_to_string("tictactoe.mil").expect("Failed to read file");
 
     let translator = Compiler::default();
 

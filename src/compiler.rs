@@ -53,6 +53,12 @@ impl Compiler {
     pub fn compile(mut self, input: &str) -> Result<ObjectProduct, String> {
         let file = parser::file(input).map_err(|e| e.to_string())?;
 
+        /*
+        for expr in &file {
+            println!("{expr:?}");
+        }
+        */
+
         // Generate a fake main function to encapsulate the code
         let main_func = FunctionExpr {
             name: "main".to_owned(),
@@ -143,13 +149,13 @@ impl Compiler {
             isa: None,
         };
 
+        println!("{}", self.ctx.func.display());
+
         verify_function(&self.ctx.func, flags_or_isa).map_err(|e| e.to_string())?;
 
         self.module
             .define_function(id, &mut self.ctx)
             .map_err(|e| e.to_string())?;
-
-        println!("{}", self.ctx.func.display());
 
         self.module.clear_context(&mut self.ctx);
         for (path, func) in functions_to_compile {
@@ -229,31 +235,22 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().stack_addr(types::I64, ss, 0)
             }
-            Expr::ArrayAccess(val, idx) => {
+            Expr::ArrayAccess(val, idx, ty) => {
                 let val = self.translate_expr(*val);
                 let idx = self.translate_expr(*idx);
                 let idx = cast_value(idx, types::I64, false, &mut self.builder);
 
                 let addr = self.builder.ins().iadd(val, idx);
 
-                self.builder
-                    .ins()
-                    .load(types::I64, MemFlags::new(), addr, 0)
-            }
-            Expr::AssignArray(arr, val) => {
-                let (arr_val, arr_idx) = match *arr {
-                    Expr::ArrayAccess(val, idx) => (val, idx),
-                    _ => panic!("Can not index into non-array type!"),
+                let load_type = if let Some(ty) = ty {
+                    LType::parse_type(&ty).unwrap().to_type()
+                } else {
+                    types::I64
                 };
 
-                let arr_val = self.translate_expr(*arr_val);
-                let arr_idx = self.translate_expr(*arr_idx);
-                let addr = self.builder.ins().iadd(arr_val, arr_idx);
-
-                let val = self.translate_expr(*val);
-
-                self.builder.ins().store(MemFlags::new(), val, addr, 0);
-                self.builder.ins().iconst(types::I64, 0)
+                self.builder
+                    .ins()
+                    .load(load_type, MemFlags::new(), addr, 0)
             }
             Expr::String(s) => {
                 let mut bytes = s.as_bytes().to_vec();
@@ -338,7 +335,11 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.use_var(val)
             }
-            Expr::Assign(name, expr) => self.translate_assign(&name, *expr),
+            Expr::Assign(var, expr) => match *var {
+                Expr::Identifier(name) => self.translate_assign(&name, *expr),
+                Expr::ArrayAccess(arr, idx, ty) => self.translate_assign_array(*arr, *idx, *expr, ty),
+                _ => panic!("Can not assign to value!"),
+            },
             Expr::DefineVar(name_and_type, expr) => {
                 self.translate_variable_declaration(&name_and_type, *expr)
             }
@@ -455,12 +456,12 @@ impl<'a> FunctionCompiler<'a> {
     }
 
     fn translate_assign(&mut self, variable: &str, expr: Expr) -> Value {
-        let value = self.translate_expr(expr);
         let variable = self
             .scope
             .find_variable_at(&self.current_scope, variable)
             .unwrap_or_else(|| panic!("Did not find variable in scope: '{}'", &variable));
 
+        let value = self.translate_expr(expr);
         let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
 
         self.builder.def_var(
@@ -470,6 +471,21 @@ impl<'a> FunctionCompiler<'a> {
             value,
         );
         value
+    }
+    fn translate_assign_array(&mut self, arr_val: Expr, arr_idx: Expr, expr: Expr, ty: Option<TypeExpr>) -> Value {
+        let arr_val = self.translate_expr(arr_val);
+        let arr_idx = self.translate_expr(arr_idx);
+        let addr = self.builder.ins().iadd(arr_val, arr_idx);
+
+        let mut val = self.translate_expr(expr);
+        if let Some(ty) = ty {
+            let cl_type = LType::parse_type(&ty).unwrap().to_type();
+            val = cast_value(val, cl_type, true, &mut self.builder);
+        }
+
+
+        self.builder.ins().store(MemFlags::new(), val, addr, 0);
+        self.builder.ins().iconst(types::I64, 0)
     }
 
     // ======================
@@ -489,7 +505,9 @@ impl<'a> FunctionCompiler<'a> {
         let merge_block = self.builder.create_block();
 
         let int_type = self.module.target_config().pointer_type();
+        /*
         self.builder.append_block_param(merge_block, int_type);
+        */
 
         self.builder
             .ins()
@@ -530,9 +548,11 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);
 
+        /*
         let phi = self.builder.block_params(merge_block)[0];
-
         phi
+        */
+        self.builder.ins().iconst(int_type, 0)
     }
 
     fn translate_while_loop(&mut self, condition: Expr, loop_body: Vec<Expr>) -> Value {

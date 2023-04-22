@@ -13,11 +13,10 @@ pub enum Expr {
     Char(String),
     String(String),
     Array(TypeExpr, Vec<Expr>),
-    ArrayAccess(Box<Expr>, Box<Expr>),
+    ArrayAccess(Box<Expr>, Box<Expr>, Option<TypeExpr>),
     Identifier(String),
     DefineVar(NameType, Box<Expr>),
-    Assign(String, Box<Expr>),
-    AssignArray(Box<Expr>, Box<Expr>),
+    Assign(Box<Expr>, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -96,45 +95,34 @@ peg::parser!(pub grammar parser() for str {
         / _ e:return_expr() _ { e }
         / _ e:def_func() _ { e }
         / _ e:def_var() _ { e }
-        / _ e:expression() _ { e }
-
-    rule expression() -> Expr
-        = assignment_array()
-        / array_access()
-        / _expression()
-    #[cache_left_rec]
-    rule _expression() -> Expr
-        = if_else()
-        / while_loop()
-        / assignment()
-        / binary_op()
+        / _ e:while_loop() _ { e }
+        / _ e:if_else() _ { e }
+        / _ e:assignment() _ { e }
+        / _ e:function_call() _ { e }
 
     rule return_expr() -> Expr
-        = "return" _ e:expression() { Expr::Return(Box::new(e)) }
+        = "return" _ e:value() { Expr::Return(Box::new(e)) }
 
     rule if_else() -> Expr
-        = "if" _ e:expression() _ "{" _
+        = "if" _ e:value() _ "{" _
         then_body:statements() _ "}" _ "else" _ "{" _
         else_body:statements() _ "}"
         { Expr::IfElse(Box::new(e), then_body, else_body) }
 
     rule while_loop() -> Expr
-        = "while" _ e:expression() _ "{" _
+        = "while" _ e:value() _ "{" _
         loop_body:statements() _ "}"
         { Expr::WhileLoop(Box::new(e), loop_body) }
 
     rule assignment() -> Expr
-        = i:identifier() _ "=" _ e:expression() { Expr::Assign(i, Box::new(e)) }
-    rule assignment_array() -> Expr
-        = i:array_access() _ "=" _ e:expression() { Expr::AssignArray(Box::new(i), Box::new(e)) }
+        = i:identifier() _ "=" _ e:value() { Expr::Assign(Box::new(Expr::Identifier(i)), Box::new(e)) }
+        / i:value() _ "=" _ e:value() { Expr::Assign(Box::new(i), Box::new(e)) }
 
     rule def_var() -> Expr
-        = i:identifier() ":" _ t:var_type() _ "=" _ e:expression() { Expr::DefineVar((i, t), Box::new(e)) }
+        = i:identifier() ":" _ t:var_type() _ "=" _ e:value() { Expr::DefineVar((i, t), Box::new(e)) }
 
     #[cache_left_rec]
-    rule binary_op() -> Expr = precedence!{
-        "(" _ a:binary_op() _ ")" { a }
-        --
+    rule value() -> Expr = precedence!{
         a:@ _ "&&" _ b:(@) { Expr::And(Box::new(a), Box::new(b)) }
         a:@ _ "||" _ b:(@) { Expr::Or(Box::new(a), Box::new(b)) }
         --
@@ -151,15 +139,21 @@ peg::parser!(pub grammar parser() for str {
         a:@ _ "*" _ b:(@) { Expr::Mul(Box::new(a), Box::new(b)) }
         a:@ _ "/" _ b:(@) { Expr::Div(Box::new(a), Box::new(b)) }
         --
-        i:array_access() { i }
-        --
         c:char() { c }
         s:string() { s }
-        i:identifier() _ "(" args:((_ e:expression() _ {e}) ** ",") ")" { Expr::Call(i, args) }
+        f:function_call() { f }
         i:identifier() { Expr::Identifier(i) }
         i:array_value() { i }
         l:literal() { l }
+        --
+        i:(@) "[" _ index:value() _ "]" { Expr::ArrayAccess(Box::new(i), Box::new(index), None) }
+        i:(@) "@" t:var_type() "[" _ index:value() _ "]" { Expr::ArrayAccess(Box::new(i), Box::new(index), Some(t)) }
+        --
+        "(" _ v:value() ")" { v }
     }
+
+    rule function_call() -> Expr
+        = i:identifier() _ "(" args:((_ e:value() _ {e}) ** ",") ")" { Expr::Call(i, args) }
 
     rule identifier() -> String
         = quiet!{ n:$(['a'..='z' | 'A'..='Z' | '_']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) { n.to_owned() } }
@@ -170,12 +164,7 @@ peg::parser!(pub grammar parser() for str {
         / "&" i:identifier() { Expr::GlobalDataAddr(i) }
 
     rule array_value() -> Expr
-        = "@" ty:var_type() "[" values:((_ v:expression() _ { v }) ** ",") "]" { Expr::Array(ty, values) }
-
-    #[cache_left_rec]
-    rule array_access() -> Expr
-        = i:array_access() "[" _ index:expression() _ "]" { Expr::ArrayAccess(Box::new(i), Box::new(index)) }
-        / i:_expression() { i }
+        = "@" ty:var_type() "[" values:((_ v:value() _ { v }) ** ",") "]" { Expr::Array(ty, values) }
 
     rule string_escape() -> String
         = s:$(quiet!{"\\n"}) { "\n".to_string() }
