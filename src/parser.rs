@@ -108,6 +108,9 @@ peg::parser!(pub grammar parser() for str {
         then_body:statements() _ "}" _ "else" _ "{" _
         else_body:statements() _ "}"
         { Expr::IfElse(Box::new(e), then_body, else_body) }
+        / "if" _ e:value() _ "{" _
+        then_body:statements() _ "}"
+        { Expr::IfElse(Box::new(e), then_body, vec![]) }
 
     rule while_loop() -> Expr
         = "while" _ e:value() _ "{" _

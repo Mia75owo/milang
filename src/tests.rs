@@ -351,3 +351,110 @@ baz
     "#;
     compile(code).unwrap();
 }
+
+#[test]
+fn compile_if_statement() {
+    let code = r#"
+fn putchar(c: i32) -> (i32);
+if 1 {}
+if 1 {
+    putchar('y')
+}
+if 1 {
+    putchar('y')
+    putchar('y')
+    putchar('y')
+}
+if 1 {
+    if 1 {
+        if 1 {
+            putchar('y')
+        }
+        if 1 {
+            putchar('y')
+        }
+    }
+}
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_if_else_statement() {
+    let code = r#"
+fn putchar(c: i32) -> (i32);
+if 1 {} else {}
+if 1 {
+    putchar('y')
+} else {
+    putchar('n')
+}
+if 1 {
+    putchar('y')
+    putchar('y')
+    putchar('y')
+} else {
+    putchar('n')
+    putchar('n')
+    putchar('n')
+}
+if 1 {
+    if 1 {
+        if 1 {
+            putchar('y')
+        } else {
+            putchar('n')
+        }
+        if 1 {
+            putchar('y')
+        } else {
+            putchar('n')
+        }
+    } else {
+        if 1 {
+            putchar('y')
+        } else {
+            putchar('n')
+        }
+        if 1 {
+            putchar('y')
+        } else {
+            putchar('n')
+        }
+    }
+} else {}
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
+#[test]
+fn compile_while_statement() {
+    let code = r#"
+fn putchar(c: i32) -> (i32);
+fn exit(c: i32) -> (i32);
+
+while 0 {}
+while 0 {
+    putchar('n')
+}
+while 0 {
+    putchar('n')
+    putchar('n')
+    putchar('n')
+}
+while 1 {
+    while 1 {
+        while 0 {
+            putchar('n')
+        }
+        while 1 {
+            exit(0)
+        }
+    }
+}
+return 0
+    "#;
+    compile(code).unwrap();
+}

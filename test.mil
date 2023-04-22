@@ -41,7 +41,7 @@ say_hi_str()
 user_input: i8 = 0
 if (0) {
   user_input = getchar()
-} else {}
+}
 
 if user_input == 'y' {
   puts("Yes :>")
