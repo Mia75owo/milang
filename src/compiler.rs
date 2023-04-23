@@ -541,10 +541,9 @@ impl<'a> FunctionCompiler<'a> {
         let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
 
         let combined = self.builder.ins().iadd(lhs, rhs);
-        let res = self.builder.ins().icmp_imm(IntCC::Equal, combined, 2);
-
-        res
+        self.builder.ins().icmp_imm(IntCC::Equal, combined, 2)
         */
+
         self.builder.ins().band(lhs, rhs)
     }
     /// Translate '||' operator
@@ -559,18 +558,16 @@ impl<'a> FunctionCompiler<'a> {
         let lhs = self.translate_value(lhs, Some(ty));
         let rhs = self.translate_value(rhs, Some(ty));
 
-        /*
         let lhs = self.builder.ins().icmp_imm(IntCC::Equal, lhs, 1);
         let rhs = self.builder.ins().icmp_imm(IntCC::Equal, rhs, 1);
 
+        /*
         let combined = self.builder.ins().iadd(lhs, rhs);
-        let res = self
-            .builder
+        self.builder
             .ins()
-            .icmp_imm(IntCC::SignedGreaterThan, combined, 0);
-
-        res
+            .icmp_imm(IntCC::SignedGreaterThan, combined, 0)
         */
+
         self.builder.ins().bor(lhs, rhs)
     }
 
