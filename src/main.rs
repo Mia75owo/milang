@@ -8,7 +8,6 @@ pub mod parser;
 pub mod scope;
 #[cfg(test)]
 mod tests;
-//pub mod translator;
 
 pub mod prelude {
     pub use crate::cl_type::*;

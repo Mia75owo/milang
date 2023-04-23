@@ -131,7 +131,7 @@ return 0
 #[test]
 fn compile_define_extern_function() {
     let code = r#"
-fn putchar(char: i32) -> (i32);
+fn putchar(char: i32) -> (i32)
 
 return 0
     "#;
@@ -141,7 +141,7 @@ return 0
 #[test]
 fn compile_call_extern_function() {
     let code = r#"
-fn putchar(char: i32) -> (i32);
+fn putchar(char: i32) -> (i32)
 
 putchar(1)
 putchar(2)
@@ -260,7 +260,7 @@ fn compile_forward_declare() {
     let code = r#"
 putchar('O')
 
-fn putchar(char: i32) -> (i32);
+fn putchar(char: i32) -> (i32)
 
 return 0
     "#;
@@ -355,7 +355,7 @@ baz
 #[test]
 fn compile_if_statement() {
     let code = r#"
-fn putchar(c: i32) -> (i32);
+fn putchar(c: i32) -> (i32)
 if 1 {}
 if 1 {
     putchar('y')
@@ -383,7 +383,7 @@ return 0
 #[test]
 fn compile_if_else_statement() {
     let code = r#"
-fn putchar(c: i32) -> (i32);
+fn putchar(c: i32) -> (i32)
 if 1 {} else {}
 if 1 {
     putchar('y')
@@ -432,8 +432,8 @@ return 0
 #[test]
 fn compile_while_statement() {
     let code = r#"
-fn putchar(c: i32) -> (i32);
-fn exit(c: i32) -> (i32);
+fn putchar(c: i32) -> (i32)
+fn exit(c: i32) -> (i32)
 
 while 0 {}
 while 0 {

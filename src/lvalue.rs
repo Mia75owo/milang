@@ -9,11 +9,12 @@ use cranelift_object::ObjectModule;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LInt {
-    //pub raw: i64,
     pub cl_repr: Variable,
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LStructure {}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LFunctionValue {
     pub name: String,
@@ -42,6 +43,7 @@ impl LFunctionValue {
         };
         Some(ret)
     }
+    /// Import the function
     pub fn declare_in_func(
         &self,
         module: &mut ObjectModule,
@@ -50,7 +52,7 @@ impl LFunctionValue {
         let callee = module
             .declare_function(&self.name, Linkage::Import, &self.signature)
             .expect("Problem declaring function");
-        
+
         module.declare_func_in_func(callee, builder.func)
     }
 }
@@ -69,6 +71,7 @@ pub struct LVariable {
     pub lvalue: LValue,
 }
 impl LVariable {
+    // Return the cranelift int variable
     pub fn get_cl_int_var(&self) -> Option<Variable> {
         match self.lvalue {
             LValue::Int(ref v) => Some(v.clone().cl_repr),

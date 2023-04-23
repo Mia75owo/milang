@@ -33,6 +33,7 @@ pub enum LType {
 }
 
 impl LType {
+    /// Parse basic types from a str and return a LType
     pub fn parse_basic_ident(input: &TypeExpr) -> Option<LType> {
         match input {
             TypeExpr::Ident(ident) => match ident.as_str() {
@@ -52,6 +53,7 @@ impl LType {
             TypeExpr::Array(_, _) => None,
         }
     }
+    /// Parse a TypeExpr and return a LType
     pub fn parse_type(input: &TypeExpr) -> Option<LType> {
         match input {
             ident @ TypeExpr::Ident(_) => Self::parse_basic_ident(ident),
@@ -70,31 +72,42 @@ impl LType {
             }
         }
     }
-    pub fn parse_function(input: &DefFuncExpr) -> Option<LType> {
+    /// Parse a function definition and return a LType
+    pub fn parse_function_def(input: &DefFuncExpr) -> Option<LType> {
         let DefFuncExpr {
             name,
             params,
             return_type,
         } = input;
+
+        // TODO: allow non-basic types (like arrays)
+
+        // Map TypeExpr in params to LType
+        let params = params
+            .iter()
+            .map(|e| {
+                (
+                    e.0.clone(),
+                    LType::parse_basic_ident(&e.1)
+                        .unwrap_or_else(|| panic!("Failed to parse type '{:?}'!", &e.1)),
+                )
+            })
+            .collect();
+
+        // Parse the return type
+        let return_type = Box::new(
+            LType::parse_basic_ident(return_type)
+                .unwrap_or_else(|| panic!("Failed to parse type '{:?}'!", &return_type)),
+        );
+
         let func = LFunctionType {
             name: name.clone(),
-            params: params
-                .iter()
-                .map(|e| {
-                    (
-                        e.0.clone(),
-                        LType::parse_basic_ident(&e.1)
-                            .unwrap_or_else(|| panic!("Failed to parse type '{:?}'!", &e.1)),
-                    )
-                })
-                .collect(),
-            return_type: Box::new(
-                LType::parse_basic_ident(return_type)
-                    .unwrap_or_else(|| panic!("Failed to parse type '{:?}'!", &return_type)),
-            ),
+            params,
+            return_type,
         };
         Some(LType::LFunction(func))
     }
+    /// LType to cranelift type
     pub fn to_type(&self) -> types::Type {
         match self {
             LType::I8 => types::I8,
@@ -113,6 +126,7 @@ impl LType {
             LType::LArray(_) => types::I64,
         }
     }
+    /// Return the size of the type in bytes
     pub fn byte_size(&self) -> usize {
         match self {
             LType::I8 => 1,

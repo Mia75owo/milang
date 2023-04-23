@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-
 use crate::prelude::*;
+
+use std::collections::HashMap;
 
 use cranelift::{
     codegen::verify_function,
@@ -68,6 +68,7 @@ impl Compiler {
             return_type: TypeExpr::Ident("i32".to_owned()),
             stmts: file,
         };
+        // Declare and compile the function
         declare_function(&mut self.module, &mut self.scope, ROOT_PATH, &main_func);
         self.compile_function(main_func, ROOT_PATH)?;
 
@@ -75,6 +76,7 @@ impl Compiler {
         Ok(object)
     }
 
+    /// Compile a function from a FunctionExpr and the current scope
     pub fn compile_function(&mut self, func: FunctionExpr, scope: &str) -> Result<(), String> {
         let FunctionExpr {
             name,
@@ -92,6 +94,7 @@ impl Compiler {
             self.ctx.func.signature.params.push(AbiParam::new(ptype));
         }
 
+        // Define the function return type
         let ret_type =
             LType::parse_basic_ident(&return_type).expect("Failed to parse type: '{type_name}'!");
         let ret_type = ret_type.to_type();
@@ -103,14 +106,15 @@ impl Compiler {
 
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
+        // Create the entry block with the function params
         let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
-
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
         let function_scope = self.scope.create_scope_for_variable_at(scope, &name);
 
+        // Pre-define functions in scope
         for expr in &stmts {
             match expr {
                 Expr::Function(func) => {
@@ -131,12 +135,15 @@ impl Compiler {
             &function_scope,
         );
 
+        // Add the function parameters to scope
         func_compiler.declare_parameter_variables(entry_block, &params);
 
+        // Translate the function expressions
         for expr in stmts {
             func_compiler.translate_statement(expr);
         }
 
+        // Get a list of functions in the function to translate later
         let functions_to_compile = func_compiler.destroy();
 
         // TODO: use name convention for scoping
@@ -159,6 +166,7 @@ impl Compiler {
             .define_function(id, &mut self.ctx)
             .map_err(|e| e.to_string())?;
 
+        // Translate all functions, defined in the function
         self.module.clear_context(&mut self.ctx);
         for (path, func) in functions_to_compile {
             self.compile_function(func, &path)?;
@@ -198,14 +206,18 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
+    /// Destroy the function builder and return a list of "sub-functions"
     pub fn destroy(self) -> Vec<(String, FunctionExpr)> {
         self.builder.finalize();
         self.functions_to_compile
     }
 
+    /// Translates top-level statements
     pub fn translate_statement(&mut self, expr: Expr) {
         match expr {
+            // Function calls 'foo()'
             Expr::Call(name, args) => _ = self.translate_call(&name, args),
+            // Variable assign 'a = 123'
             Expr::Assign(var, expr) => match *var {
                 Expr::Identifier(name) => self.translate_assign(&name, *expr),
                 Expr::ArrayAccess(arr, idx, ty) => {
@@ -213,17 +225,21 @@ impl<'a> FunctionCompiler<'a> {
                 }
                 _ => panic!("Can not assign to value!"),
             },
-            Expr::DefineVar(name_and_type, expr) => {
+            // Variable definitions 'a: i32 = 123'
+            Expr::DefVar(name_and_type, expr) => {
                 self.translate_variable_declaration(&name_and_type, *expr)
             }
+            // If-Else 'if 1 {} else {}'
             Expr::IfElse(condition, then_body, else_body) => {
                 self.translate_if_else(*condition, then_body, else_body)
             }
+            // While Loops 'while 1 {}'
             Expr::WhileLoop(condition, loop_body) => {
                 self.translate_while_loop(*condition, loop_body)
             }
+            // Function definitions 'fn foo() -> (i32)'
             Expr::DefFunc(func) => {
-                let func_type = LType::parse_function(&func).unwrap();
+                let func_type = LType::parse_function_def(&func).unwrap();
                 let func_value = LValue::Function(
                     LFunctionValue::gen_from_function_type(func_type.clone(), self.module).unwrap(),
                 );
@@ -236,6 +252,7 @@ impl<'a> FunctionCompiler<'a> {
                 self.scope
                     .insert_variable_at(&self.current_scope, &func.name, variable);
             }
+            // Return statements 'return 123'
             Expr::Return(expr) => {
                 let ret_type = self
                     .builder
@@ -250,7 +267,7 @@ impl<'a> FunctionCompiler<'a> {
                 let ret = cast_value(ret, ret_type, true, &mut self.builder);
                 self.builder.ins().return_(&[ret]);
             }
-
+            // Functions 'fn foo() -> (i32) {}'
             Expr::Function(func) => {
                 declare_function(self.module, self.scope, &self.current_scope, &func);
                 self.functions_to_compile
@@ -313,7 +330,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 func.signature.returns[0].value_type
             }
-            Expr::GlobalDataAddr(_name) => types::I64,
+            Expr::TestVal(_name) => types::I64,
             Expr::Identifier(name) => {
                 let var = self
                     .scope
@@ -327,6 +344,7 @@ impl<'a> FunctionCompiler<'a> {
 
     pub fn translate_value(&mut self, expr: Expr, try_type: Option<Type>) -> Value {
         match expr {
+            // Literals '123'
             Expr::Literal(literal) => {
                 let imm: i64 = literal.parse().unwrap();
                 if let Some(ty) = try_type {
@@ -335,6 +353,7 @@ impl<'a> FunctionCompiler<'a> {
                     self.builder.ins().iconst(types::I64, imm)
                 }
             }
+            // Chars "'a'"
             Expr::Char(c) => {
                 let c = if c.len() == 1 {
                     c.chars().next().unwrap()
@@ -350,6 +369,7 @@ impl<'a> FunctionCompiler<'a> {
                     self.builder.ins().iconst(types::I8, imm as i64)
                 }
             }
+            // Arrays '@i64[1, 2, 3]'
             Expr::Array(ty, values) => {
                 let ltype = LType::parse_type(&ty).unwrap();
                 let type_size = LType::byte_size(&ltype);
@@ -370,6 +390,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().stack_addr(types::I64, ss, 0)
             }
+            // Array accesses 'foo@i8[0]'
             Expr::ArrayAccess(val, idx, ty) => {
                 let val = self.translate_value(*val, Some(types::I64));
                 let idx = self.translate_value(*idx, Some(types::I64));
@@ -385,6 +406,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().load(load_type, MemFlags::new(), addr, 0)
             }
+            // Strings '"foo"'
             Expr::String(s) => {
                 let mut bytes = s.as_bytes().to_vec();
                 bytes.push(b'\0');
@@ -398,6 +420,7 @@ impl<'a> FunctionCompiler<'a> {
                 let local_msg_id = self.module.declare_data_in_func(msg_id, self.builder.func);
                 self.builder.ins().global_value(types::I64, local_msg_id)
             }
+            // Binary add '1+1'
             Expr::Add(lhs, rhs) => {
                 let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
@@ -408,6 +431,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().iadd(lhs, rhs)
             }
+            // Binary subtract '1-1'
             Expr::Sub(lhs, rhs) => {
                 let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
@@ -418,6 +442,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().isub(lhs, rhs)
             }
+            // Binary multiplication '1*1'
             Expr::Mul(lhs, rhs) => {
                 let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
@@ -428,6 +453,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().imul(lhs, rhs)
             }
+            // Binary division '1/1'
             Expr::Div(lhs, rhs) => {
                 let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
@@ -438,6 +464,7 @@ impl<'a> FunctionCompiler<'a> {
 
                 self.builder.ins().udiv(lhs, rhs)
             }
+            // Binary comparators '==' '!=' '<' '<=' '>' '>=' '&&' '||'
             Expr::Eq(lhs, rhs) => self.translate_icmp(IntCC::Equal, *lhs, *rhs),
             Expr::Ne(lhs, rhs) => self.translate_icmp(IntCC::NotEqual, *lhs, *rhs),
             Expr::Lt(lhs, rhs) => self.translate_icmp(IntCC::SignedLessThan, *lhs, *rhs),
@@ -446,24 +473,14 @@ impl<'a> FunctionCompiler<'a> {
             Expr::Ge(lhs, rhs) => self.translate_icmp(IntCC::SignedGreaterThanOrEqual, *lhs, *rhs),
             Expr::And(lhs, rhs) => self.translate_and(*lhs, *rhs),
             Expr::Or(lhs, rhs) => self.translate_or(*lhs, *rhs),
+            // Function calls 'foo()'
             Expr::Call(name, args) => self.translate_call(&name, args),
-            Expr::GlobalDataAddr(_name) => {
+            // For testing
+            Expr::TestVal(_name) => {
                 // NOTE: this is just used to test new features at the moment
-                let ss = self.builder.create_sized_stack_slot(StackSlotData {
-                    kind: StackSlotKind::ExplicitSlot,
-                    size: 4,
-                });
-
-                let val = self.builder.ins().iconst(types::I8, 1);
-                self.builder.ins().stack_store(val, ss, 0);
-                self.builder.ins().stack_store(val, ss, 1);
-                self.builder.ins().stack_store(val, ss, 2);
-                self.builder.ins().stack_store(val, ss, 3);
-
-                let new_val = self.builder.ins().stack_load(types::I64, ss, 0);
-
-                new_val
+                self.builder.ins().iconst(types::I64, 0)
             }
+            // Identifiers 'foo'
             Expr::Identifier(name) => {
                 let var = self
                     .scope
@@ -480,7 +497,9 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
+    // Translate variable compares
     fn translate_icmp(&mut self, cmp: IntCC, lhs: Expr, rhs: Expr) -> Value {
+        // Get a type for both values
         let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
         let lhs = self.translate_value(lhs, Some(ty));
@@ -490,11 +509,13 @@ impl<'a> FunctionCompiler<'a> {
 
         self.builder.ins().icmp(cmp, lhs, rhs)
     }
+    /// Translate '&&' operator
     fn translate_and(&mut self, lhs: Expr, rhs: Expr) -> Value {
         // (x && y)
         // (x == 1 && y == 1)
         // ((x + y) == 2)
 
+        // Get a type for both values
         let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
         let lhs = self.translate_value(lhs, Some(ty));
@@ -511,11 +532,13 @@ impl<'a> FunctionCompiler<'a> {
         */
         self.builder.ins().band(lhs, rhs)
     }
+    /// Translate '||' operator
     fn translate_or(&mut self, lhs: Expr, rhs: Expr) -> Value {
         // (x || y)
         // (x == 1 || y == 1)
         // ((x + y) > 0)
 
+        // Get a type for both values
         let ty = choose_type(self.expr_value_type(&lhs), self.expr_value_type(&rhs));
 
         let lhs = self.translate_value(lhs, Some(ty));
@@ -540,10 +563,11 @@ impl<'a> FunctionCompiler<'a> {
     // Translate Variables
     // ===================
 
+    /// Translate a variable declaration
     fn translate_variable_declaration(&mut self, variable: &NameType, expr: Expr) {
         let variable = self.declare_variable(variable);
-        let value = self.translate_value(expr, Some(variable.ltype.to_type()));
 
+        let value = self.translate_value(expr, Some(variable.ltype.to_type()));
         let value = cast_value(value, variable.ltype.to_type(), true, &mut self.builder);
 
         self.builder.def_var(
@@ -554,7 +578,9 @@ impl<'a> FunctionCompiler<'a> {
         );
     }
 
+    /// Translate a variable assign
     fn translate_assign(&mut self, variable: &str, expr: Expr) {
+        // Get the variable from scope
         let variable = self
             .scope
             .find_variable_at(&self.current_scope, variable)
@@ -570,6 +596,8 @@ impl<'a> FunctionCompiler<'a> {
             value,
         );
     }
+
+    /// Translate assign to arrays
     fn translate_assign_array(
         &mut self,
         arr_val: Expr,
@@ -577,10 +605,13 @@ impl<'a> FunctionCompiler<'a> {
         expr: Expr,
         ty: Option<TypeExpr>,
     ) {
+        // Translate the array pointer
         let arr_val = self.translate_value(arr_val, Some(types::I64));
+        // Translate the array index and compute the offset
         let arr_idx = self.translate_value(arr_idx, Some(types::I64));
         let addr = self.builder.ins().iadd(arr_val, arr_idx);
 
+        // Get the type to store
         let val = if let Some(ty) = ty {
             let cl_type = LType::parse_type(&ty).unwrap().to_type();
             let val = self.translate_value(expr, Some(cl_type));
@@ -597,6 +628,7 @@ impl<'a> FunctionCompiler<'a> {
     // Translate Control flow
     // ======================
 
+    // Translate if-else statements
     fn translate_if_else(&mut self, condition: Expr, then_body: Vec<Expr>, else_body: Vec<Expr>) {
         let condition_value = self.translate_value(condition, Some(types::I8));
 
@@ -653,6 +685,7 @@ impl<'a> FunctionCompiler<'a> {
         */
     }
 
+    // Translate while-loop statement
     fn translate_while_loop(&mut self, condition: Expr, loop_body: Vec<Expr>) {
         let header_block = self.builder.create_block();
         let body_block = self.builder.create_block();
@@ -683,7 +716,9 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.seal_block(exit_block);
     }
 
+    /// Translate a function call
     fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Value {
+        // Get the function from scope
         let func = self
             .scope
             .find_variable_at(&self.current_scope, name)
@@ -696,6 +731,7 @@ impl<'a> FunctionCompiler<'a> {
 
         assert!(args.len() == func.signature.params.len());
 
+        // Get the function signature or generate it
         let local_callee = if let Some(callee) = self.importet_functions.get(name) {
             *callee
         } else {
@@ -704,6 +740,7 @@ impl<'a> FunctionCompiler<'a> {
             callee
         };
 
+        // Translate the function params
         let mut arg_values = Vec::new();
         for (arg, param) in args.into_iter().zip(func.signature.params.iter()) {
             let val = self.translate_value(arg, Some(param.value_type));
@@ -715,30 +752,30 @@ impl<'a> FunctionCompiler<'a> {
         self.builder.inst_results(call)[0]
     }
 
+    /// Declare a variable in scope
     fn declare_variable(&mut self, variable: &NameType) -> LVariable {
-        let (str_var_name, str_var_type) = variable;
+        let (var_name, str_var_type) = variable;
 
+        // Create a new cranelift variable
         let var = Variable::new(*self.variable_index);
         *self.variable_index += 1;
 
         let var_type = LType::parse_type(str_var_type)
             .unwrap_or_else(|| panic!("Failed to parse type: '{:?}'", &str_var_type));
 
-        let value = LValue::Int(LInt {
-            //raw: 0,
-            cl_repr: var,
-        });
+        let value = LValue::Int(LInt { cl_repr: var });
         let variable = LVariable {
             ltype: var_type.clone(),
             lvalue: value,
         };
 
         self.scope
-            .insert_variable_at(&self.current_scope, str_var_name, variable.clone());
+            .insert_variable_at(&self.current_scope, var_name, variable.clone());
         self.builder.declare_var(var, var_type.to_type());
 
         variable
     }
+    /// Declare parameters for a function in scope
     fn declare_parameter_variables(&mut self, entry_block: Block, params: &[NameType]) {
         for (i, param) in params.iter().enumerate() {
             let var = self.declare_variable(param);
@@ -749,6 +786,7 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 }
+/// Declare a function in scope
 fn declare_function(
     module: &mut ObjectModule,
     scope_root: &mut ScopeRoot,
@@ -761,7 +799,7 @@ fn declare_function(
         return_type: func.return_type.to_owned(),
     };
 
-    let func_type = LType::parse_function(&new_func).unwrap();
+    let func_type = LType::parse_function_def(&new_func).unwrap();
     let func_value = LValue::Function(
         LFunctionValue::gen_from_function_type(func_type.clone(), module).unwrap(),
     );
@@ -773,6 +811,7 @@ fn declare_function(
 
     scope_root.insert_variable_at(current_scope, &func.name, variable);
 }
+/// Declare a function from a function definition in scope
 fn declare_function_from_func_def(
     module: &mut ObjectModule,
     scope_root: &mut ScopeRoot,
@@ -785,7 +824,7 @@ fn declare_function_from_func_def(
         return_type: func.return_type.to_owned(),
     };
 
-    let func_type = LType::parse_function(&new_func).unwrap();
+    let func_type = LType::parse_function_def(&new_func).unwrap();
     let func_value = LValue::Function(
         LFunctionValue::gen_from_function_type(func_type.clone(), module).unwrap(),
     );

@@ -37,6 +37,7 @@ impl std::fmt::Display for ScopeRoot {
 }
 
 impl ScopeRoot {
+    /// Print a scope at 'path'
     pub fn display_scope_at(&mut self, path: &str) {
         let scope = self.get_scope(path);
         if let Some(s) = scope {
@@ -45,18 +46,22 @@ impl ScopeRoot {
             println!("{{x}}");
         }
     }
+    /// Insert a variable in the scope at 'path'
     pub fn insert_variable_at(&mut self, path: &str, name: &str, variable: LVariable) -> String {
         let scope = self.get_scope(path).unwrap();
         scope.insert_variable(name, variable);
         format!("{path}#{name}")
     }
+    /// Insert a variable at 'path'
     pub fn create_scope_at(&mut self, path: &str, name: &str) -> String {
         let scope = self.get_scope(path).unwrap();
         scope.create_scope(name)
     }
+    /// Create a scope for a variable (like a function)
     pub fn create_scope_for_variable_at(&mut self, path: &str, name: &str) -> String {
         self.create_scope_at(path, &format!("{name}$"))
     }
+    /// Get a variable from 'path'
     pub fn get_variable(&mut self, path: &str) -> Option<LVariable> {
         if path == ROOT_PATH {
             return None;
@@ -70,9 +75,11 @@ impl ScopeRoot {
             None
         }
     }
+    /// Get a variable from the scope at 'path'
     pub fn get_variable_at(&mut self, path: &str, name: &str) -> Option<LVariable> {
         self.get_variable(&format!("{path}#{name}"))
     }
+    /// Get the scope at 'path'
     fn get_scope(&mut self, path: &str) -> Option<&mut Scope> {
         if path == ROOT_PATH {
             return Some(&mut self.root);
@@ -86,6 +93,7 @@ impl ScopeRoot {
             None
         }
     }
+    /// Find a variable in the scope and parent scopes
     pub fn find_variable_at(&mut self, path: &str, name: &str) -> Option<LVariable> {
         if path == ROOT_PATH {
             return None;
@@ -184,9 +192,5 @@ impl Scope {
         } else {
             self.map.get_mut(path)
         }
-    }
-
-    fn find_value_in_scopes(&self, _scope_path: &str, _name: &str) -> Option<LVariable> {
-        todo!()
     }
 }

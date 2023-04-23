@@ -15,7 +15,7 @@ pub enum Expr {
     Array(TypeExpr, Vec<Expr>),
     ArrayAccess(Box<Expr>, Box<Expr>, Option<TypeExpr>),
     Identifier(String),
-    DefineVar(NameType, Box<Expr>),
+    DefVar(NameType, Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
@@ -32,7 +32,7 @@ pub enum Expr {
     IfElse(Box<Expr>, Vec<Expr>, Vec<Expr>),
     WhileLoop(Box<Expr>, Vec<Expr>),
     Call(String, Vec<Expr>),
-    GlobalDataAddr(String),
+    TestVal(String),
     DefFunc(DefFuncExpr),
     Function(FunctionExpr),
     Return(Box<Expr>),
@@ -84,7 +84,7 @@ peg::parser!(pub grammar parser() for str {
         = "fn" _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
         "->" _
-        "(" returns:var_type() ")" ";"
+        "(" returns:var_type() ")"
         { Expr::DefFunc(DefFuncExpr { name, params, return_type: returns }) }
 
     rule statements() -> Vec<Expr>
@@ -122,7 +122,7 @@ peg::parser!(pub grammar parser() for str {
         / i:value() _ "=" _ e:value() { Expr::Assign(Box::new(i), Box::new(e)) }
 
     rule def_var() -> Expr
-        = i:identifier() ":" _ t:var_type() _ "=" _ e:value() { Expr::DefineVar((i, t), Box::new(e)) }
+        = i:identifier() ":" _ t:var_type() _ "=" _ e:value() { Expr::DefVar((i, t), Box::new(e)) }
 
     #[cache_left_rec]
     rule value() -> Expr = precedence!{
@@ -164,7 +164,7 @@ peg::parser!(pub grammar parser() for str {
 
     rule literal() -> Expr
         = n:$(['0'..='9']+) { Expr::Literal(n.to_owned()) }
-        / "&" i:identifier() { Expr::GlobalDataAddr(i) }
+        / "&" i:identifier() { Expr::TestVal(i) }
 
     rule array_value() -> Expr
         = "@" ty:var_type() "[" values:((_ v:value() _ { v }) ** ",") "]" { Expr::Array(ty, values) }
