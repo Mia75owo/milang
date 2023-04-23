@@ -222,6 +222,20 @@ return 0
     compile(code).unwrap();
 }
 
+#[test]
+fn compile_call_void_function() {
+    let code = r#"
+fn foo() {
+    return;
+}
+
+foo()
+
+return 0
+    "#;
+    compile(code).unwrap();
+}
+
 
 #[test]
 fn compile_get_value_from_function_call() {

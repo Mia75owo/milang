@@ -4,6 +4,7 @@ pub type NameType = (String, TypeExpr);
 pub enum TypeExpr {
     Ident(String),
     Array(Box<TypeExpr>, Box<Expr>),
+    Void(),
 }
 
 /// The AST node for expressions.
@@ -35,7 +36,7 @@ pub enum Expr {
     TestVal(String),
     DefFunc(DefFuncExpr),
     Function(FunctionExpr),
-    Return(Box<Expr>),
+    Return(Option<Box<Expr>>),
 }
 
 #[derive(Debug, Clone)]
@@ -79,13 +80,22 @@ peg::parser!(pub grammar parser() for str {
         stmts:statements()
         _ "}"
         { Expr::Function(FunctionExpr { name, params, return_type, stmts }) }
+        / "fn" _ name:identifier() _
+        "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
+        "{" _
+        stmts:statements()
+        _ "}"
+        { Expr::Function(FunctionExpr { name, params, return_type: TypeExpr::Void(), stmts }) }
 
     rule def_func() -> Expr
         = "fn" _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
         "->" _
-        "(" returns:var_type() ")"
-        { Expr::DefFunc(DefFuncExpr { name, params, return_type: returns }) }
+        "(" return_type:var_type() ")"
+        { Expr::DefFunc(DefFuncExpr { name, params, return_type }) }
+        / "fn" _ name:identifier() _
+        "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
+        { Expr::DefFunc(DefFuncExpr { name, params, return_type: TypeExpr::Void() }) }
 
     rule statements() -> Vec<Expr>
         = s:(statement()*) { s }
@@ -101,7 +111,8 @@ peg::parser!(pub grammar parser() for str {
         / _ e:function_call() _ { e }
 
     rule return_expr() -> Expr
-        = "return" _ e:value() { Expr::Return(Box::new(e)) }
+        = "return" _ e:value() { Expr::Return(Some(Box::new(e))) }
+        / "return;"  { Expr::Return(None) }
 
     rule if_else() -> Expr
         = "if" _ e:value() _ "{" _

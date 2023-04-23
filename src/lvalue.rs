@@ -34,8 +34,10 @@ impl LFunctionValue {
             sig.params.push(AbiParam::new(ltype));
         }
 
-        let ret_type = func_type.return_type.to_type();
-        sig.returns.push(AbiParam::new(ret_type));
+        let ret_type = func_type.return_type.try_to_type();
+        if let Some(ret_type) = ret_type {
+            sig.returns.push(AbiParam::new(ret_type));
+        }
 
         let ret = Self {
             name: func_type.name,

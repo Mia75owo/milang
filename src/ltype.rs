@@ -27,6 +27,7 @@ pub enum LType {
     F32,
     F64,
 
+    Void(),
     LArray(LArrayType),
     LStructure,
     LFunction(LFunctionType),
@@ -50,6 +51,7 @@ impl LType {
 
                 _ => None,
             },
+            TypeExpr::Void() => Some(LType::Void()),
             TypeExpr::Array(_, _) => None,
         }
     }
@@ -57,6 +59,7 @@ impl LType {
     pub fn parse_type(input: &TypeExpr) -> Option<LType> {
         match input {
             ident @ TypeExpr::Ident(_) => Self::parse_basic_ident(ident),
+            ident @ TypeExpr::Void() => Self::parse_basic_ident(ident),
             TypeExpr::Array(ltype, size) => {
                 let ltype = Self::parse_type(ltype).unwrap();
                 let ltype = Box::new(ltype);
@@ -108,6 +111,26 @@ impl LType {
         Some(LType::LFunction(func))
     }
     /// LType to cranelift type
+    pub fn try_to_type(&self) -> Option<types::Type> {
+        match self {
+            LType::I8 => Some(types::I8),
+            LType::I16 => Some(types::I16),
+            LType::I32 => Some(types::I32),
+            LType::I64 => Some(types::I64),
+            LType::U8 => Some(types::I8),
+            LType::U16 => Some(types::I16),
+            LType::U32 => Some(types::I32),
+            LType::U64 => Some(types::I64),
+            LType::F32 => Some(types::F32),
+            LType::F64 => Some(types::F64),
+
+            LType::LStructure => None,
+            LType::LFunction(_) => None,
+            LType::LArray(_) => Some(types::I64),
+            LType::Void() => None,
+        }
+    }
+    /// LType to cranelift type
     pub fn to_type(&self) -> types::Type {
         match self {
             LType::I8 => types::I8,
@@ -124,6 +147,7 @@ impl LType {
             LType::LStructure => panic!("Structure type not implemented!"),
             LType::LFunction(_) => panic!("Function type not implemented!"),
             LType::LArray(_) => types::I64,
+            LType::Void() => panic!("Type is void!"),
         }
     }
     /// Return the size of the type in bytes
@@ -146,6 +170,7 @@ impl LType {
                 let size = Self::byte_size(&arr.ltype);
                 size * arr.size
             }
+            LType::Void() => 0,
         }
     }
 }

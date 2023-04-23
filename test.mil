@@ -17,23 +17,23 @@ fn foo() -> (i8) {
   return baa()
 }
 
-fn say_hi() -> (i32) {
+fn say_hi() {
   putchar('H')
   putchar('i')
   putchar('i')
   putchar('i')
   putchar('\n')
 
-  return 0
+  return;
 }
 
 say_hi()
 
-fn say_hi_str() -> (i32) {
+fn say_hi_str() {
   puts("Hiii :>")
   puts("How are you?")
   puts("Look at this cool escaped stuff: \" \\ \n \r \"")
-  return 0
+  return;
 }
 
 say_hi_str()
@@ -82,9 +82,9 @@ if (1 == 1 && 2 == 2) {
 putchar('\n')
 
 test_var: [i8] = @i8['a']
-fn test(var: i64) -> (i32) {
+fn test(var: i64) {
   putchar(var[0])
-  return 0
+  return;
 }
 test(test_var)
 

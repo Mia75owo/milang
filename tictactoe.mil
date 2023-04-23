@@ -4,12 +4,10 @@
 // 712 advanced immediate cast
 // 682 && || instructions
 
-fn getchar() -> (i32);
-fn putchar(char: i32) -> (i32);
-fn exit(code: i32) -> (i32);
-fn printf(str: i64, v1: i64) -> (i32);
-
-exit(0)
+fn getchar() -> (i32)
+fn putchar(char: i32) -> (i32)
+fn exit(code: i32) -> (i32)
+fn printf(str: i64, v1: i64) -> (i32)
 
 player: i8 = 0
 board: [i8] = @i8[
@@ -52,16 +50,16 @@ while(1) {
 
 fn check_win(board: i64) -> (i8) {
   won: i8 = 0
-  if(check_single(board[0], board[1], board[2])) { won = 1 }
-  if(check_single(board[3], board[4], board[5])) { won = 1 }
-  if(check_single(board[6], board[7], board[8])) { won = 1 }
+  if(check_single(board@i8[0], board@i8[1], board@i8[2])) { won = 1 }
+  if(check_single(board@i8[3], board@i8[4], board@i8[5])) { won = 1 }
+  if(check_single(board@i8[6], board@i8[7], board@i8[8])) { won = 1 }
 
-  if(check_single(board[0], board[3], board[6])) { won = 1 }
-  if(check_single(board[1], board[4], board[7])) { won = 1 }
-  if(check_single(board[2], board[5], board[8])) { won = 1 }
+  if(check_single(board@i8[0], board@i8[3], board@i8[6])) { won = 1 }
+  if(check_single(board@i8[1], board@i8[4], board@i8[7])) { won = 1 }
+  if(check_single(board@i8[2], board@i8[5], board@i8[8])) { won = 1 }
 
-  if(check_single(board[0], board[4], board[8])) { won = 1 }
-  if(check_single(board[2], board[4], board[6])) { won = 1 }
+  if(check_single(board@i8[0], board@i8[4], board@i8[8])) { won = 1 }
+  if(check_single(board@i8[2], board@i8[4], board@i8[6])) { won = 1 }
 
   return won
 }
@@ -69,20 +67,20 @@ fn check_single(v1: i8, v2: i8, v3: i8) -> (i8) {
   return v1 == v2 && v1 == v3
 }
 
-fn print_board(board: i64) -> (i32) {
-  printf("%c ", board[0])
-  printf("%c ", board[1])
-  printf("%c \n", board[2])
-  printf("%c ", board[3])
-  printf("%c ", board[4])
-  printf("%c \n", board[5])
-  printf("%c ", board[6])
-  printf("%c ", board[7])
-  printf("%c \n", board[8])
+fn print_board(board: i64) {
+  printf("%c ", board@i8[0])
+  printf("%c ", board@i8[1])
+  printf("%c \n", board@i8[2])
+  printf("%c ", board@i8[3])
+  printf("%c ", board@i8[4])
+  printf("%c \n", board@i8[5])
+  printf("%c ", board@i8[6])
+  printf("%c ", board@i8[7])
+  printf("%c \n", board@i8[8])
   putchar('=')
   putchar('\n')
 
-  return 0
+  return;
 }
 
 return 0

@@ -97,12 +97,14 @@ impl Compiler {
         // Define the function return type
         let ret_type =
             LType::parse_basic_ident(&return_type).expect("Failed to parse type: '{type_name}'!");
-        let ret_type = ret_type.to_type();
-        self.ctx
-            .func
-            .signature
-            .returns
-            .push(AbiParam::new(ret_type));
+        let ret_type = ret_type.try_to_type();
+        if let Some(ret_type) = ret_type {
+            self.ctx
+                .func
+                .signature
+                .returns
+                .push(AbiParam::new(ret_type));
+        }
 
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
@@ -254,18 +256,25 @@ impl<'a> FunctionCompiler<'a> {
             }
             // Return statements 'return 123'
             Expr::Return(expr) => {
-                let ret_type = self
-                    .builder
-                    .func
-                    .signature
-                    .returns
-                    .first()
-                    .unwrap()
-                    .value_type;
+                // Check if function and return-expr both return void or a value
+                if self.builder.func.signature.returns.first().is_some() != expr.is_some() {
+                    if expr.is_some() {
+                        panic!("Can not return a value from a function with void return type!");
+                    } else {
+                        panic!("Can not return void from a function with a value return type!");
+                    }
+                }
 
-                let ret = self.translate_value(*expr, Some(ret_type));
-                let ret = cast_value(ret, ret_type, true, &mut self.builder);
-                self.builder.ins().return_(&[ret]);
+                if let Some(ret_type) = self.builder.func.signature.returns.first() {
+                    // Return a value
+                    let ret_type = ret_type.value_type;
+                    let ret = self.translate_value(*expr.unwrap(), Some(ret_type));
+                    let ret = cast_value(ret, ret_type, true, &mut self.builder);
+                    self.builder.ins().return_(&[ret]);
+                } else {
+                    // Return void
+                    self.builder.ins().return_(&[]);
+                }
             }
             // Functions 'fn foo() -> (i32) {}'
             Expr::Function(func) => {
@@ -328,7 +337,11 @@ impl<'a> FunctionCompiler<'a> {
                     _ => panic!("'{name}' is not a function!"),
                 };
 
-                func.signature.returns[0].value_type
+                if let Some(ty) = func.signature.returns.get(0) {
+                    ty.value_type
+                } else {
+                    types::INVALID
+                }
             }
             Expr::TestVal(_name) => types::I64,
             Expr::Identifier(name) => {
@@ -474,7 +487,9 @@ impl<'a> FunctionCompiler<'a> {
             Expr::And(lhs, rhs) => self.translate_and(*lhs, *rhs),
             Expr::Or(lhs, rhs) => self.translate_or(*lhs, *rhs),
             // Function calls 'foo()'
-            Expr::Call(name, args) => self.translate_call(&name, args),
+            Expr::Call(name, args) => self
+                .translate_call(&name, args)
+                .expect("Trying to take value of void function!"),
             // For testing
             Expr::TestVal(_name) => {
                 // NOTE: this is just used to test new features at the moment
@@ -717,7 +732,7 @@ impl<'a> FunctionCompiler<'a> {
     }
 
     /// Translate a function call
-    fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Value {
+    fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Option<Value> {
         // Get the function from scope
         let func = self
             .scope
@@ -749,7 +764,7 @@ impl<'a> FunctionCompiler<'a> {
         }
 
         let call = self.builder.ins().call(local_callee, &arg_values);
-        self.builder.inst_results(call)[0]
+        self.builder.inst_results(call).get(0).copied()
     }
 
     /// Declare a variable in scope
