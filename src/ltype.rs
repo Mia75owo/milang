@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::prelude::*;
 use cranelift::prelude::*;
 
@@ -6,6 +8,7 @@ pub struct LFunctionType {
     pub name: String,
     pub params: Vec<(String, LType)>,
     pub return_type: Box<LType>,
+    pub modifiers: HashSet<FunctionModifier>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +84,7 @@ impl LType {
             name,
             params,
             return_type,
+            modifiers,
         } = input;
 
         // TODO: allow non-basic types (like arrays)
@@ -107,6 +111,7 @@ impl LType {
             name: name.clone(),
             params,
             return_type,
+            modifiers: modifiers.clone(),
         };
         Some(LType::LFunction(func))
     }

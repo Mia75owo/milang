@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cranelift::{
     codegen::verify_function,
@@ -67,6 +67,7 @@ impl Compiler {
             params: vec![],
             return_type: TypeExpr::Ident("i32".to_owned()),
             stmts: file,
+            modifiers: HashSet::from([FunctionModifier::NoMangle]),
         };
         // Declare and compile the function
         declare_function(&mut self.module, &mut self.scope, ROOT_PATH, &main_func);
@@ -83,6 +84,7 @@ impl Compiler {
             params,
             return_type,
             stmts,
+            modifiers,
         } = func;
 
         // Declare the param types
@@ -120,11 +122,14 @@ impl Compiler {
         for expr in &stmts {
             match expr {
                 Expr::Function(func) => {
-                    declare_function(&mut self.module, &mut self.scope, scope, func)
+                    declare_function(&mut self.module, &mut self.scope, &function_scope, func)
                 }
-                Expr::DefFunc(def) => {
-                    declare_function_from_func_def(&mut self.module, &mut self.scope, scope, def)
-                }
+                Expr::DefFunc(def) => declare_function_from_func_def(
+                    &mut self.module,
+                    &mut self.scope,
+                    &function_scope,
+                    def,
+                ),
                 _ => (),
             }
         }
@@ -148,10 +153,15 @@ impl Compiler {
         // Get a list of functions in the function to translate later
         let functions_to_compile = func_compiler.destroy();
 
-        // TODO: use name convention for scoping
+        let path_in_module = if modifiers.contains(&FunctionModifier::NoMangle) {
+            name
+        } else {
+            ScopeRoot::path_convention(&function_scope)
+        };
+
         let id = self
             .module
-            .declare_function(&name, Linkage::Export, &self.ctx.func.signature)
+            .declare_function(&path_in_module, Linkage::Export, &self.ctx.func.signature)
             .map_err(|e| e.to_string())?;
 
         let flags = settings::Flags::new(settings::builder());
@@ -240,19 +250,10 @@ impl<'a> FunctionCompiler<'a> {
                 self.translate_while_loop(*condition, loop_body)
             }
             // Function definitions 'fn foo() -> (i32)'
-            Expr::DefFunc(func) => {
-                let func_type = LType::parse_function_def(&func).unwrap();
-                let func_value = LValue::Function(
-                    LFunctionValue::gen_from_function_type(func_type.clone(), self.module).unwrap(),
-                );
+            Expr::DefFunc(_func) => {
+                // This is unneeded because it gets pre-declared
 
-                let variable = LVariable {
-                    ltype: func_type,
-                    lvalue: func_value,
-                };
-
-                self.scope
-                    .insert_variable_at(&self.current_scope, &func.name, variable);
+                //declare_function_from_func_def(self.module, self.scope, &self.current_scope, &func);
             }
             // Return statements 'return 123'
             Expr::Return(expr) => {
@@ -278,7 +279,9 @@ impl<'a> FunctionCompiler<'a> {
             }
             // Functions 'fn foo() -> (i32) {}'
             Expr::Function(func) => {
-                declare_function(self.module, self.scope, &self.current_scope, &func);
+                // This is unneeded because it gets pre-declared
+
+                //declare_function(self.module, self.scope, &self.current_scope, &func);
                 self.functions_to_compile
                     .push((self.current_scope.clone(), func));
             }
@@ -731,30 +734,46 @@ impl<'a> FunctionCompiler<'a> {
     /// Translate a function call
     fn translate_call(&mut self, name: &str, args: Vec<Expr>) -> Option<Value> {
         // Get the function from scope
-        let func = self
+        let func_path = self
             .scope
-            .find_variable_at(&self.current_scope, name)
+            .path_find_variable_at(&self.current_scope, name)
             .unwrap_or_else(|| panic!("Did not find function '{name}' in scope!"));
+        let func = self.scope.get_variable(&func_path).unwrap();
 
-        let func = match func.lvalue {
+        let func_lvalue = match func.lvalue {
             LValue::Function(f) => f,
             _ => panic!("'{name}' is not a function!"),
         };
+        let func_ltype = match func.ltype {
+            LType::LFunction(f) => f,
+            _ => panic!("'{name}' is not a function!"),
+        };
 
-        assert!(args.len() == func.signature.params.len());
+        assert!(args.len() == func_lvalue.signature.params.len());
 
         // Get the function signature or generate it
         let local_callee = if let Some(callee) = self.importet_functions.get(name) {
             *callee
         } else {
-            let callee = func.declare_in_func(self.module, &mut self.builder);
+            let path_in_module = if func_ltype.modifiers.contains(&FunctionModifier::NoMangle) {
+                name.to_owned()
+            } else {
+                ScopeRoot::path_convention(&func_path)
+            };
+
+            let callee = self
+                .module
+                .declare_function(&path_in_module, Linkage::Import, &func_lvalue.signature)
+                .expect("Problem declaring function");
+            let callee = self.module.declare_func_in_func(callee, self.builder.func);
             self.importet_functions.insert(name.to_owned(), callee);
+
             callee
         };
 
         // Translate the function params
         let mut arg_values = Vec::new();
-        for (arg, param) in args.into_iter().zip(func.signature.params.iter()) {
+        for (arg, param) in args.into_iter().zip(func_lvalue.signature.params.iter()) {
             let val = self.translate_value(arg, Some(param.value_type));
             let val = cast_value(val, param.value_type, true, &mut self.builder);
             arg_values.push(val);
@@ -809,6 +828,7 @@ fn declare_function(
         name: func.name.to_owned(),
         params: func.params.clone(),
         return_type: func.return_type.to_owned(),
+        modifiers: func.modifiers.clone(),
     };
 
     let func_type = LType::parse_function_def(&new_func).unwrap();
@@ -834,6 +854,7 @@ fn declare_function_from_func_def(
         name: func.name.to_owned(),
         params: func.params.clone(),
         return_type: func.return_type.to_owned(),
+        modifiers: func.modifiers.clone(),
     };
 
     let func_type = LType::parse_function_def(&new_func).unwrap();

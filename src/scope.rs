@@ -46,6 +46,12 @@ impl ScopeRoot {
             println!("{{x}}");
         }
     }
+    /// Creates a path using the path convention
+    pub fn path_convention(path: &str) -> String {
+        let path = path.trim_start_matches("#@");
+        let path = path.trim_end_matches('$');
+        path.replace('#', "")
+    }
     /// Insert a variable in the scope at 'path'
     pub fn insert_variable_at(&mut self, path: &str, name: &str, variable: LVariable) -> String {
         let scope = self.get_scope(path).unwrap();
@@ -105,6 +111,24 @@ impl ScopeRoot {
             let var = self.get_variable_at(path, name);
             if var.is_some() {
                 return var;
+            }
+
+            let last_name_idx = path.rfind('#')?;
+            path = &path[..last_name_idx];
+        }
+    }
+    /// Return the path of a found variable
+    pub fn path_find_variable_at(&mut self, path: &str, name: &str) -> Option<String> {
+        if path == ROOT_PATH {
+            return None;
+        }
+        // Remove root (#@)
+        let mut path = path.strip_prefix(ROOT_PATH).unwrap_or(path);
+
+        loop {
+            let var = self.get_variable_at(path, name);
+            if var.is_some() {
+                return Some(format!("{path}#{name}"));
             }
 
             let last_name_idx = path.rfind('#')?;

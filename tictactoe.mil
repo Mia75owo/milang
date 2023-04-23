@@ -3,11 +3,12 @@
 // 722 immediate cast
 // 712 advanced immediate cast
 // 682 && || instructions
+// 658 void return type
 
-fn getchar() -> (i32)
-fn putchar(char: i32) -> (i32)
-fn exit(code: i32) -> (i32)
-fn printf(str: i64, v1: i64) -> (i32)
+fn<C> getchar() -> (i32)
+fn<C> putchar(char: i32) -> (i32)
+fn<C> exit(code: i32) -> (i32)
+fn<C> printf(str: i64, v1: i64) -> (i32)
 
 player: i8 = 0
 board: [i8] = @i8[

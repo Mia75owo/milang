@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 pub type NameType = (String, TypeExpr);
 
 #[derive(Debug, Clone)]
@@ -39,11 +41,18 @@ pub enum Expr {
     Return(Option<Box<Expr>>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FunctionModifier {
+    NoMangle,
+}
+
 #[derive(Debug, Clone)]
 pub struct DefFuncExpr {
     pub name: String,
     pub params: Vec<NameType>,
     pub return_type: TypeExpr,
+
+    pub modifiers: HashSet<FunctionModifier>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +61,8 @@ pub struct FunctionExpr {
     pub params: Vec<NameType>,
     pub return_type: TypeExpr,
     pub stmts: Vec<Expr>,
+
+    pub modifiers: HashSet<FunctionModifier>,
 }
 
 peg::parser!(pub grammar parser() for str {
@@ -71,31 +82,38 @@ peg::parser!(pub grammar parser() for str {
     pub rule _file() -> Vec<Expr>
         = stmts:statements() { stmts }
 
+    rule function_modifier() -> FunctionModifier
+        = "no_mangle" { FunctionModifier::NoMangle }
+        / "C" { FunctionModifier::NoMangle }
     rule function() -> Expr
-        = "fn" _ name:identifier() _
+        = "fn"
+        mods: ("<" mods:((_ m:function_modifier() _ { m }) ** ",") ">" { mods })?
+        _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
-        "->" _
-        "(" return_type:var_type() ")" _
+        return_type: ("->" _ "(" r:var_type() ")" _ { r })?
         "{" _
         stmts:statements()
         _ "}"
-        { Expr::Function(FunctionExpr { name, params, return_type, stmts }) }
-        / "fn" _ name:identifier() _
-        "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
-        "{" _
-        stmts:statements()
-        _ "}"
-        { Expr::Function(FunctionExpr { name, params, return_type: TypeExpr::Void(), stmts }) }
+        { Expr::Function(FunctionExpr {
+            name,
+            params,
+            return_type: return_type.unwrap_or(TypeExpr::Void()),
+            stmts,
+            modifiers: HashSet::from_iter(mods.unwrap_or(vec![]).into_iter()),
+        }) }
 
     rule def_func() -> Expr
-        = "fn" _ name:identifier() _
+        = "fn"
+        mods: ("<" mods:((_ m:function_modifier() _ { m }) ** ",") ">" { mods })?
+        _ name:identifier() _
         "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
-        "->" _
-        "(" return_type:var_type() ")"
-        { Expr::DefFunc(DefFuncExpr { name, params, return_type }) }
-        / "fn" _ name:identifier() _
-        "(" params:((_ n:identifier() _ ":" _ t:var_type() _ {(n, t)}) ** ",") ")" _
-        { Expr::DefFunc(DefFuncExpr { name, params, return_type: TypeExpr::Void() }) }
+        return_type: ("->" _ "(" r:var_type() ")" { r })?
+        { Expr::DefFunc(DefFuncExpr {
+            name,
+            params,
+            return_type: return_type.unwrap_or(TypeExpr::Void()),
+            modifiers: HashSet::from_iter(mods.unwrap_or(vec![FunctionModifier::NoMangle]).into_iter()),
+        }) }
 
     rule statements() -> Vec<Expr>
         = s:(statement()*) { s }

@@ -1,10 +1,7 @@
 use crate::prelude::*;
 
-use cranelift::{
-    codegen::ir::FuncRef,
-    prelude::{AbiParam, FunctionBuilder, Signature, Variable},
-};
-use cranelift_module::{Linkage, Module};
+use cranelift::prelude::{AbiParam, Signature, Variable};
+use cranelift_module::Module;
 use cranelift_object::ObjectModule;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,18 +41,6 @@ impl LFunctionValue {
             signature: sig,
         };
         Some(ret)
-    }
-    /// Import the function
-    pub fn declare_in_func(
-        &self,
-        module: &mut ObjectModule,
-        builder: &mut FunctionBuilder,
-    ) -> FuncRef {
-        let callee = module
-            .declare_function(&self.name, Linkage::Import, &self.signature)
-            .expect("Problem declaring function");
-
-        module.declare_func_in_func(callee, builder.func)
     }
 }
 
